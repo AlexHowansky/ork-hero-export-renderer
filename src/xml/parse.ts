@@ -54,7 +54,20 @@ interface MutableElement {
  * guarantee is worth more here than general-purpose XML support.
  */
 export function parseXml(source: string, options: ParseXmlOptions = {}): XmlElement {
-  return new XmlParser(source, options).parse();
+  return new XmlParser(normalizeLineEndings(source), options).parse();
+}
+
+/**
+ * XML line-ending normalization (XML 1.0 section 2.11): CRLF and a lone CR both
+ * become LF, across the whole document before anything else looks at it.
+ *
+ * This is not cosmetic. Character files store multi-line text — a character's
+ * background, the CSS in Campaign Use — with CRLF, while HERO Designer's own
+ * exports contain no carriage returns at all. Skipping this step puts a stray
+ * CR into the rendered sheet for every line of prose.
+ */
+export function normalizeLineEndings(text: string): string {
+  return text.includes('\r') ? text.replace(/\r\n?/g, '\n') : text;
 }
 
 class XmlParser {
@@ -232,8 +245,11 @@ class XmlParser {
       if (valueEnd === -1) {
         throw this.fail(`The value of attribute "${attrName}" on <${name}> is unterminated.`);
       }
-      // Attribute values legitimately span lines in HERO character files.
-      attributes[attrName] = decodeEntities(this.input.slice(valueStart, valueEnd));
+      // Attribute-value normalization (XML 1.0 section 3.3.3): a literal tab or
+      // newline in the value becomes a space. Character references such as
+      // &#10; are exempt, which is why this runs before entity decoding.
+      const literal = this.input.slice(valueStart, valueEnd).replace(/[\t\n]/g, ' ');
+      attributes[attrName] = decodeEntities(literal);
       i = valueEnd + 1;
     }
 

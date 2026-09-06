@@ -5,14 +5,31 @@
  * (`*.hdc`) to produce an HTML character sheet, reproducing what HERO Designer
  * itself does when you export a character.
  *
- * Rendering arrives in a later phase; what is exported today is the game-rules
- * layer that rendering will be built on.
+ * Rendering arrives in a later phase. What is exported today is the game-rules
+ * layer and the character-file reader that rendering will be built on.
  */
 
 export { HeroError, InvalidFileError, RulesError } from './util/errors.ts';
 export { consoleLogger, silentLogger, type Logger, type LogLevel } from './util/logger.ts';
 
-export { parseXml, childNamed, childrenNamed, type XmlElement, type ParseXmlOptions } from './xml/parse.ts';
+export {
+  parseXml,
+  normalizeLineEndings,
+  childNamed,
+  childrenNamed,
+  type XmlElement,
+  type ParseXmlOptions,
+} from './xml/parse.ts';
+
+export { parseCharacterFile, groupByFramework, isYes } from './hdc/parse.ts';
+export { decodeCharacterFile, type DecodeResult, type DetectedEncoding } from './hdc/decode.ts';
+export type {
+  Ability,
+  BasicConfiguration,
+  CharacterFile,
+  CharacterImage,
+  CharacterInfo,
+} from './hdc/types.ts';
 
 export { RulesLibrary, defaultRulesDirectory } from './rules/load.ts';
 export { resolveSystem, indexSection } from './rules/merge.ts';

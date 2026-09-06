@@ -82,7 +82,7 @@ async function readManifest(directory: string): Promise<RulesManifest> {
   } catch (cause) {
     throw new RulesError(
       `Could not read the game rules data at ${path}. ` +
-        'Run "hero-extract-rules <path to HD6.jar>" to generate it.',
+        'Run "extract-rules <path to HD6.jar>" to generate it.',
       { source: path, cause },
     );
   }
@@ -90,7 +90,7 @@ async function readManifest(directory: string): Promise<RulesManifest> {
   if (manifest.formatVersion !== RULES_FORMAT_VERSION) {
     throw new RulesError(
       `The rules data is in format version ${manifest.formatVersion}, but this version of the renderer ` +
-        `reads version ${RULES_FORMAT_VERSION}. Re-run "hero-extract-rules" to regenerate it.`,
+        `reads version ${RULES_FORMAT_VERSION}. Re-run "extract-rules" to regenerate it.`,
       { source: path },
     );
   }

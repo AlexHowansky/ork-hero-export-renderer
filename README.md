@@ -4,9 +4,9 @@ Renders HERO System character sheets by applying a HERO Designer export template
 (`*.hde`) to a character file (`*.hdc`), producing the same HTML that HERO
 Designer's own export function produces — without needing HERO Designer.
 
-**Status: in progress.** Phase 1, the game-rules layer, is complete. The
-template engine, the rules calculations and the rendering CLI are still to come.
-See `PLAN.md`.
+**Status: in progress.** Phase 1 (the game-rules layer) and phase 2 (reading
+character files) are complete. The template engine, the rules calculations and
+the rendering CLI are still to come. See `PLAN.md`.
 
 ## Game rules data
 
@@ -30,7 +30,7 @@ Chains are stored unresolved and merged at load time, because nine of the
 seventeen systems extend `Main.hdt` and pre-merging would store it nine times.
 
 ```ts
-import { RulesLibrary } from 'hero-export-renderer';
+import { RulesLibrary } from 'ork-hero-export-renderer';
 
 const library = await RulesLibrary.load();
 const system = library.system('Superheroic'); // chain: Main -> Superheroic
@@ -39,6 +39,27 @@ const system = library.system('Superheroic'); // chain: Main -> Superheroic
 The rules data is derived from Hero Games' `*.hdt` files and is their
 copyrighted material. It is included here for use with characters you built in
 your own copy of HERO Designer.
+
+## Reading a character file
+
+```ts
+import { parseCharacterFile } from 'ork-hero-export-renderer';
+import { readFileSync } from 'node:fs';
+
+const character = parseCharacterFile(readFileSync('Redshift.hdc'), 'Redshift.hdc');
+character.info.characterName; // "Redshift"
+character.templateId;         // "Superheroic" — which game system to load
+```
+
+Two details of the format are worth knowing, because getting either wrong is
+silent rather than loud:
+
+* `.hdc` files are UTF-16 **big** endian with a byte-order mark, even though the
+  XML declaration inside says only `encoding="UTF-16"`. The mark is the
+  authority; the declaration is not.
+* Prose fields store line breaks as CRLF, but HERO Designer's exports contain no
+  carriage returns. XML line-ending normalization is applied on read, as the
+  spec requires, so what you get back matches what an export contains.
 
 ## Development
 

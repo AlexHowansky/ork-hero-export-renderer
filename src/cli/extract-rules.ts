@@ -13,7 +13,7 @@ import {
   type RulesManifest,
 } from '../rules/types.ts';
 
-const USAGE = `Usage: hero-extract-rules <HD6.jar> [options]
+const USAGE = `Usage: extract-rules <HD6.jar> [options]
 
 Compiles the HERO System game rules out of a HERO Designer jar into the JSON
 this renderer reads. Run it once, and again whenever you install a new build of

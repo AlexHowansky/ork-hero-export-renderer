@@ -31,9 +31,10 @@ describe('parseXml', () => {
     expect(root.text).toBe('<b>&amp;</b>');
   });
 
-  test('allows newlines inside attribute values, as character files do', () => {
+  test('accepts attribute values that span lines, as character files write them', () => {
     const root = parseXml('<A COMMENTS="line one\nline two">x</A>');
-    expect(root.attributes['COMMENTS']).toBe('line one\nline two');
+    // Normalized to a space per the XML spec; see the normalization tests below.
+    expect(root.attributes['COMMENTS']).toBe('line one line two');
   });
 
   test('skips comments and the XML declaration', () => {
@@ -75,5 +76,28 @@ describe('parseXml', () => {
     } catch (error) {
       expect((error as Error).message).toContain('in Broken.hdt');
     }
+  });
+});
+
+describe('normalization required for byte-exact output', () => {
+  // Character files store prose with CRLF; HERO Designer's exports have none.
+  test('normalizes CRLF and lone CR to LF in text', () => {
+    expect(parseXml('<A>one\r\ntwo\rthree</A>').text).toBe('one\ntwo\nthree');
+  });
+
+  test('normalizes line endings inside CDATA too', () => {
+    expect(parseXml('<A><![CDATA[one\r\ntwo]]></A>').text).toBe('one\ntwo');
+  });
+
+  test('turns literal tabs and newlines in attribute values into spaces', () => {
+    expect(parseXml('<A C="one\r\ntwo\tthree"/>').attributes['C']).toBe('one two three');
+  });
+
+  test('leaves character references for those characters alone', () => {
+    expect(parseXml('<A C="one&#10;two"/>').attributes['C']).toBe('one\ntwo');
+  });
+
+  test('still counts lines correctly after normalization', () => {
+    expect(() => parseXml('<A>\r\n<B>\r\n</A>')).toThrow(/<B>.*line 2/);
   });
 });
