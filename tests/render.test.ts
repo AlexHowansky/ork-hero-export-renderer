@@ -15,52 +15,82 @@ import { HeroError } from '../src/util/errors.ts';
 const SAVED_AT = new Date(2026, 8, 6, 10, 36, 50);
 const APP_VERSION = '20260405';
 
+/**
+ * The characters the renderer is held to, each with the moment its reference
+ * sheet was exported. Redshift is a fifth-edition multipower character;
+ * The Bismarck is a fifth-edition Elemental Control one, and between them they
+ * cover most of what a sheet can say.
+ */
+const CHARACTERS = [
+  { name: 'Redshift', savedAt: SAVED_AT },
+  { name: 'The Bismarck', savedAt: new Date(2026, 8, 6, 18, 1, 6) },
+] as const;
+
+interface Rendering {
+  readonly sheet: Sheet;
+  readonly rendered: string;
+  readonly expected: string;
+}
+
+const renderings = new Map<string, Rendering>();
+const of = (name: string): Rendering => renderings.get(name) as Rendering;
+
 let sheet: Sheet;
 let rendered: string;
-let expected: string;
 
 beforeAll(async () => {
   const library = await RulesLibrary.load();
-  const character = parseCharacterFile(readFileSync('fixtures/Redshift.hdc'), 'Redshift.hdc');
-  sheet = buildSheet(character, library.system(character.templateId), { strict: true });
   const template = parseTemplate(readFileSync('fixtures/Ork-16x9.hde', 'utf8'), {
     source: 'Ork-16x9.hde',
   });
-  // Strict throughout: nothing is guessed at or skipped to make this pass.
-  rendered = applyReplacements(
-    renderTemplate(
-      template,
-      createContext(sheet, {
-        strict: true,
-        characterFileName: 'Redshift.hdc',
-        saveTimestamp: SAVED_AT,
-        appVersion: APP_VERSION,
-      }),
-    ),
-    template.replacements,
-    { strict: true },
-  );
-  expected = readFileSync('fixtures/Redshift.HTML', 'utf8');
+  for (const { name, savedAt } of CHARACTERS) {
+    const file = `${name}.hdc`;
+    const character = parseCharacterFile(readFileSync(`fixtures/${file}`), file);
+    const built = buildSheet(character, library.system(character.templateId), { strict: true });
+    // Strict throughout: nothing is guessed at or skipped to make this pass.
+    renderings.set(name, {
+      sheet: built,
+      rendered: applyReplacements(
+        renderTemplate(
+          template,
+          createContext(built, {
+            strict: true,
+            characterFileName: file,
+            saveTimestamp: savedAt,
+            appVersion: APP_VERSION,
+          }),
+        ),
+        template.replacements,
+        { strict: true },
+      ),
+      expected: readFileSync(`fixtures/${name}.HTML`, 'utf8'),
+    });
+  }
+  ({ sheet, rendered } = of('Redshift'));
 });
 
-describe('rendering the reference character', () => {
+// The acceptance gate: pure TypeScript reproducing HERO Designer's own export
+// of each character, to the byte.
+describe.each(CHARACTERS.map((entry) => entry.name))('rendering %s', (name) => {
   test('produces the same number of lines as the exported sheet', () => {
-    expect(rendered.split('\n')).toHaveLength(expected.split('\n').length);
+    const { rendered: ours, expected: theirs } = of(name);
+    expect(ours.split('\n')).toHaveLength(theirs.split('\n').length);
   });
 
-  // The acceptance gate: pure TypeScript reproducing HERO Designer's own
-  // export of this character, to the byte.
   test('reproduces the exported sheet exactly', () => {
-    const ours = rendered.split('\n');
-    const theirs = expected.split('\n');
-    const differing = theirs
-      .map((line, index) => (ours[index] === line ? undefined : index + 1))
+    const { rendered: ours, expected: theirs } = of(name);
+    const mine = ours.split('\n');
+    const yours = theirs.split('\n');
+    const differing = yours
+      .map((line, index) => (mine[index] === line ? undefined : index + 1))
       .filter((line): line is number => line !== undefined);
     // Reported as line numbers so a regression says where, not just that.
     expect(differing).toEqual([]);
-    expect(rendered).toBe(expected);
+    expect(ours).toBe(theirs);
   });
+});
 
+describe('rendering the reference character', () => {
   test('embeds the character portrait byte for byte', () => {
     const hex = Buffer.from(sheet.character.image?.base64 ?? '', 'base64').toString('hex');
     expect(rendered).toContain(`const imageHex = '${hex}'`);
@@ -108,6 +138,102 @@ describe('rendering the reference character', () => {
     expect(rendered).toContain('HTH Damage 3 ½d6');
     expect(rendered).toContain('Reduced Endurance (½ END; +¼)');
     expect(rendered).not.toContain('1/2d6');
+  });
+});
+
+describe('The Bismarck, an Elemental Control character', () => {
+  const bismarck = () => of('The Bismarck');
+
+  test('fills in the document header', () => {
+    expect(bismarck().rendered).toContain('<title>The Bismarck</title>');
+    expect(bismarck().rendered).toContain('content="The Bismarck.hdc"');
+    expect(bismarck().rendered).toContain('content="Sun, 6 Sep 2026 18:01:06"');
+  });
+
+  // An Elemental Control is quoted by what its slots may cost, which is twice
+  // what the control itself does, and each slot pays its active cost less the
+  // control's before its limitations divide it.
+  test('prices an Elemental Control and its slots', () => {
+    const { powers } = bismarck().sheet;
+    const control = powers.find((power) => power.isFramework);
+    expect([control?.text, control?.cost, control?.end]).toEqual([
+      'Elemental Control, 10-point powers',
+      '5',
+      '',
+    ]);
+    const slot = (name: string) => powers.find((power) => power.source.name === name);
+    expect(slot('smoke screen')?.cost).toBe('8');
+    expect(slot('camera drone')?.cost).toBe('17');
+    expect(slot('rocket jump')?.cost).toBe('7');
+  });
+
+  test('adds up to the totals on the sheet', () => {
+    const { sheet: built } = bismarck();
+    expect(built.points.totalPoints).toBe(383);
+    expect(built.points.disadPointsUsed).toBe(145);
+    expect(built.points.experienceSpent).toBe(63);
+    expect(built.points.experienceUnspent).toBe(21);
+  });
+
+  // Armor is bought as points of defence and raises the characteristic line;
+  // Damage Resistance only makes what is already there resistant.
+  test('counts Armor towards PD and ED', () => {
+    const { characteristics, defences } = bismarck().sheet;
+    expect(characteristics.byId.get('PD')?.total).toBe(25);
+    expect(characteristics.byId.get('ED')?.total).toBe(25);
+    expect(defences.physical).toEqual({ total: 25, resistant: 25 });
+  });
+
+  // A Leaping power bought "Upward Movement Only" raises one half of the
+  // character's leap without touching the other.
+  test('leaps further up than forward', () => {
+    expect(bismarck().rendered).toContain('<span class="primary">1"/10 ½"</span>');
+    expect(bismarck().rendered).toContain('1" forward, 10 ½" upward');
+  });
+
+  test('describes the powers this character brought that Redshift did not', () => {
+    const text = (name: string) =>
+      bismarck().sheet.powers.find((power) => power.source.name === name)?.text;
+    // A killing attack brackets its adders where an Energy Blast lists them.
+    expect(text('@PLACEHOLDER artillery strike')).toBe(
+      'Killing Attack - Ranged 1d6 (Custom Adder), Area Of Effect (One Hex; +1/2), ' +
+        'Usable Simultaneously (up to 4 people at once; +3/4); 6 Charges (-3/4), ' +
+        'Can Be Missile Deflected (-1/4), Gestures (-1/4), Extra Time (Delayed Phase, -1/4)',
+    );
+    // Linked names the power it is linked to, and Area Of Effect sizes itself
+    // from what the power would cost without it.
+    expect(text("the big gun's boom")).toBe(
+      'Hearing Group Flash 3d6, Area Of Effect (4" Radius; +1 1/2) (22 Active Points); ' +
+        'No Range (-1/2), Linked (the big gun; -1/2), Restrainable (-1/2)',
+    );
+    // A sense power names its groups, a Focus prints as the kind of focus it
+    // is, and an adder that writes the power down to nothing leaves it free.
+    expect(text('Starlight Cloak')).toBe(
+      'Invisibility to Sight, Hearing, Radio and Smell/Taste Groups , Custom Adder, No Fringe, ' +
+        'Reduced Endurance (0 END; +1/2) (1 Active Points); Independent (-2), OAF (-1), ' +
+        'Conditional Power: Only at Night Power does not work in Very Common Circumstances (-1)',
+    );
+  });
+
+  // A power that costs no endurance prints a bare zero; one that runs on
+  // charges prints how many; and a talent leaves the column empty.
+  test('prints the endurance column three different ways', () => {
+    const end = (xmlId: string) =>
+      bismarck().sheet.powers.find((power) => power.source.xmlId === xmlId)?.end;
+    expect(end('ARMOR')).toBe('0');
+    expect(end('RKA')).toBe('[6]');
+    expect(end('ABSOLUTE_RANGE_SENSE')).toBe('');
+  });
+
+  // Combat skill levels are listed with the skills they were bought alongside
+  // as well as in their own table, and are priced by what they apply to.
+  test('lists combat skill levels in both tables', () => {
+    const { skills, combatLevels } = bismarck().sheet;
+    const level = combatLevels[0]!;
+    expect([level.text, level.cost]).toEqual(['+3 with All Combat', 24]);
+    expect(skills).toContain(level);
+    // A skill that rolls brackets its subject; a familiarity does not.
+    expect(skills.map((skill) => skill.text)).toContain('Navigation (Land)');
   });
 });
 

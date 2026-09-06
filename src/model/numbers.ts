@@ -19,20 +19,39 @@ function settle(value: number): number {
   return Number(value.toFixed(EPSILON_PLACES));
 }
 
+/**
+ * HERO Designer rounds in two steps: it first throws away everything past the
+ * first decimal place, then rounds that tenth to a whole number. So 8.57 is not
+ * 9 but 8 — it becomes 8.5 first, and a half rounds down. Skipping the first
+ * step gets an Elemental Control slot's cost wrong by a point.
+ */
+function toTenths(value: number, epsilon: number): number {
+  const settled = settle(value + epsilon);
+  return Math.trunc(settle(settled * 10)) / 10;
+}
+
 /** Rounds .5 away from zero, as HERO Designer's own rounder does. */
 export function roundHalfUp(value: number): number {
-  const settled = settle(value);
-  return settled < 0 ? -Math.floor(-settled + 0.5) : Math.floor(settled + 0.5);
+  const tenths = toTenths(value, 0);
+  const magnitude = Math.abs(tenths);
+  const rounded = Math.floor(magnitude) + (settle(magnitude % 1) >= 0.5 ? 1 : 0);
+  return tenths < 0 ? -rounded : rounded;
+}
+
+/** Rounds .5 towards zero. This is the rounder the cost arithmetic uses. */
+export function roundHalfDown(value: number): number {
+  const tenths = toTenths(value, 1e-11);
+  const magnitude = Math.abs(tenths);
+  const rounded = Math.floor(magnitude) + (settle(magnitude % 1) > 0.5 ? 1 : 0);
+  return tenths < 0 ? -rounded : rounded;
 }
 
 export function roundDown(value: number): number {
-  const settled = settle(value);
-  return settled < 0 ? Math.ceil(settled) : Math.floor(settled);
+  return Math.floor(settle(value));
 }
 
 export function roundUp(value: number): number {
-  const settled = settle(value);
-  return settled < 0 ? Math.floor(settled) : Math.ceil(settled);
+  return Math.ceil(settle(value));
 }
 
 /**

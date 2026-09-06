@@ -21,6 +21,7 @@ import {
   totalCost,
 } from '../src/model/abilities.ts';
 import { buildPower, totalPowerCost } from '../src/model/powers.ts';
+import { buildSheet } from '../src/tags/sheet.ts';
 import { summarisePoints } from '../src/model/points.ts';
 import {
   formatDice,
@@ -202,7 +203,7 @@ describe('disadvantages', () => {
       ['Vulnerability:  2 x STUN high energy radiation (Uncommon)', 10],
     ];
     const built = character.disadvantages.map((d) =>
-      buildDisadvantage(d, ruleFor(system, 'DISADVANTAGES', d.xmlId)),
+      buildDisadvantage(d, system, ruleFor(system, 'DISADVANTAGES', d.xmlId)),
     );
     expect(built.map((d) => [d.text, d.cost])).toEqual(expected);
     expect(totalCost(built)).toBe(150);
@@ -212,7 +213,7 @@ describe('disadvantages', () => {
   // effect and doubles the points.
   test('lets a modifier qualify and multiply a disadvantage', () => {
     const vulnerability = character.disadvantages.find((d) => d.xmlId === 'VULNERABILITY')!;
-    const built = buildDisadvantage(vulnerability, ruleFor(system, 'DISADVANTAGES', 'VULNERABILITY'));
+    const built = buildDisadvantage(vulnerability, system, ruleFor(system, 'DISADVANTAGES', 'VULNERABILITY'));
     expect(built.text).toContain('2 x STUN high energy radiation');
     expect(built.cost).toBe(10);
   });
@@ -233,7 +234,7 @@ describe('martial maneuvers', () => {
 describe('modifiers', () => {
   test('lists modifiers cheapest first, keeping file order within a tie', () => {
     const power = character.powers.find((p) => p.xmlId === 'CHANGEENVIRONMENT')!;
-    expect(sortedModifiers(power.modifiers).map((m) => m.xmlId)).toEqual([
+    expect(sortedModifiers(power.modifiers, system).map((m) => m.xmlId)).toEqual([
       'REDUCEDEND',
       'AFFECTSDESOLID',
       'SELECTIVETARGET',
@@ -243,7 +244,7 @@ describe('modifiers', () => {
 
   test('brackets the option, unless a comment takes its place', () => {
     const power = character.powers.find((p) => p.xmlId === 'CHANGEENVIRONMENT')!;
-    const byId = (id: string) => modifierText(power.modifiers.find((m) => m.xmlId === id)!).text;
+    const byId = (id: string) => modifierText(power.modifiers.find((m) => m.xmlId === id)!, { system }).text;
     expect(byId('REDUCEDEND')).toBe('Reduced Endurance (1/2 END; +1/4)');
     expect(byId('SELECTIVETARGET')).toBe('Selective Target (+1/2)');
     expect(byId('AFFECTSDESOLID')).toBe(
@@ -254,13 +255,15 @@ describe('modifiers', () => {
   test('drops an option that only repeats the modifier name', () => {
     const healing = character.powers.find((p) => p.xmlId === 'HEALING')!;
     const ranged = healing.modifiers.find((m) => m.xmlId === 'RANGED')!;
-    expect(modifierText(ranged).text).toBe('Ranged (+1/2)');
+    expect(modifierText(ranged, { system }).text).toBe('Ranged (+1/2)');
   });
 });
 
 describe('powers', () => {
   test('describes and prices every power on the sheet', () => {
-    const built = character.powers.map((p) => buildPower(p, system));
+    // Built through the sheet, because a slot is priced by the framework it
+    // sits in and only the sheet knows which that is.
+    const built = buildSheet(character, system).powers;
     const rows = built.map((p) => [p.end, p.text, p.cost] as const);
     expect(rows[0]).toEqual(['0', 'Damage Resistance (6 PD/6 ED)', '6']);
     expect(rows[1]).toEqual(['0', 'Power Defense (5 points)', '5']);
@@ -336,6 +339,6 @@ describe('points', () => {
       character.martialArts.map(buildManeuver).reduce((sum, m) => sum + m.cost, 0),
     );
     expect([characteristics.totalCost, skills, talents, martialArts]).toEqual([168, 92, 18, 14]);
-    expect(totalPowerCost(character.powers.map((p) => buildPower(p, system)))).toBe(124);
+    expect(totalPowerCost(buildSheet(character, system).powers)).toBe(124);
   });
 });

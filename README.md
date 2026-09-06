@@ -4,17 +4,17 @@ Renders HERO System character sheets by applying a HERO Designer export template
 (`*.hde`) to a character file (`*.hdc`), producing the same HTML that HERO
 Designer's own export function produces — without needing HERO Designer.
 
-**Status: complete.** Applying `fixtures/Ork-16x9.hde` to
-`fixtures/Redshift.hdc` reproduces `fixtures/Redshift.HTML` — the sheet HERO
-Designer exported from those same two files — **byte for byte, all 2,728,374 of
-them**, with strict mode on, through the command line and through the library
-alike.
+**Status: complete.** Applying `fixtures/Ork-16x9.hde` to `fixtures/Redshift.hdc`
+and to `fixtures/The Bismarck.hdc` reproduces `fixtures/Redshift.HTML` and
+`fixtures/The Bismarck.HTML` — the sheets HERO Designer exported from those same
+files — **byte for byte**, with strict mode on, through the command line and
+through the library alike.
 
-That said, one character is one character. Three rules were inferred from this
-fixture alone and are the most likely places another character will disagree:
-how an area power's radius scales, how an adder priced only in the rules data is
-costed, and the two-space separator before a subject (`Hunted:  Overwatch`),
-which Knowledge Skills alone do not use. Each is commented where it lives.
+Between them the two characters cover a Multipower and an Elemental Control,
+attack, defence, sense and movement powers, charges, foci, linked powers, skill
+levels and a vehicle perk. Where the arithmetic or the wording was not obvious,
+it was taken from HERO Designer's own classes rather than guessed at; what is
+still an inference from the fixtures is commented where it lives.
 
 ## Rendering a sheet
 

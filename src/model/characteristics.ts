@@ -1,6 +1,6 @@
 import type { Ability } from '../hdc/types.ts';
 import type { RuleNode, RuleSystem } from '../rules/types.ts';
-import { formatDice, formatFraction, formatInches, formatRoll, roundDown, roundHalfUp } from './numbers.ts';
+import { formatDice, formatFraction, formatInches, formatRoll, roundDown, roundHalfDown, roundHalfUp } from './numbers.ts';
 
 /**
  * A characteristic as it appears on the sheet.
@@ -30,6 +30,11 @@ export interface Characteristic {
   readonly cost: number;
   readonly levels: number;
   readonly notes: string;
+  /**
+   * How far the character moves, for the movement characteristics. Leaping
+   * tracks two figures because a power can raise one without the other.
+   */
+  readonly movement?: { readonly forward: number; readonly upward: number };
 }
 
 /**
@@ -80,6 +85,7 @@ export function buildCharacteristics(
   character: readonly Ability[],
   system: RuleSystem,
   bonuses: readonly Bonus[] = [],
+  movementPowers: readonly Ability[] = [],
 ): CharacteristicSet {
   const rules = new Map(system.sections.CHARACTERISTICS.entries.map((entry) => [entry.id, entry]));
   const owned = new Map(character.map((ability) => [ability.xmlId, ability]));
@@ -116,6 +122,7 @@ export function buildCharacteristics(
 
     built.set(id, {
       id,
+      ...(id === 'LEAPING' ? { movement: leapingDistances(rawBase + levels, movementPowers) } : {}),
       alias: ability.alias.length > 0 ? ability.alias : id,
       rawBase,
       base,
@@ -138,6 +145,35 @@ export function buildCharacteristics(
     // Rounded once over exact costs, never by adding up rounded ones.
     totalCost: roundHalfUp(all.reduce((sum, entry) => sum + entry.rawCost, 0)),
   };
+}
+
+/**
+ * How far the character leaps.
+ *
+ * Leaping is bought forward, and the character gets half as much upward for
+ * free. A Leaping power says which half it buys: one marked "Upward Movement
+ * Only" adds its whole value to the upward figure and nothing to the forward
+ * one.
+ */
+function leapingDistances(
+  value: number,
+  powers: readonly Ability[],
+): { forward: number; upward: number } {
+  let forward = value;
+  let upward = value / 2;
+  for (const power of powers) {
+    if (power.xmlId !== 'LEAPING' || power.attributes['AFFECTS_TOTAL'] === 'No') {
+      continue;
+    }
+    const has = (id: string) => power.modifiers.some((modifier) => modifier.xmlId === id);
+    if (!has('UPWARDMOVEMENTONLY')) {
+      forward += power.levels;
+    }
+    if (!has('FORWARDMOVEMENTONLY')) {
+      upward += power.levels / 2;
+    }
+  }
+  return { forward, upward };
 }
 
 /** Characteristics the rules define, in dependency order. */
@@ -235,12 +271,14 @@ export function characteristicNotes(
       // Two spaces after the colon, as everywhere else on the sheet.
       return `Phases:  ${phases(total).join(', ')}`;
     case 'LEAPING': {
-      const forward = movementDistance(characteristic);
-      return `${formatInches(forward)} forward, ${formatInches(Math.floor(forward) / 2)} upward`;
+      const { forward, upward } = characteristic.movement ?? { forward: 0, upward: 0 };
+      return `${formatInches(floorToHalf(forward))} forward, ${formatInches(floorToHalf(upward))} upward`;
     }
     case 'RUNNING':
     case 'SWIMMING':
-      return `END [${Math.max(1, roundHalfUp(total / 5))}]`;
+      // One point of END buys five inches of movement, so a character who has
+      // bought none of either spends none.
+      return `END [${total > 0 ? Math.max(1, roundHalfDown(total / 5)) : 0}]`;
     default:
       return '';
   }
@@ -269,8 +307,8 @@ export function movementDistance(characteristic: Characteristic): number {
 
 export function characteristicDisplayValue(characteristic: Characteristic): string {
   if (characteristic.id === 'LEAPING') {
-    const forward = movementDistance(characteristic);
-    return `${formatInches(forward)}/${formatInches(floorToHalf(forward / 2))}`;
+    const { forward, upward } = characteristic.movement ?? { forward: 0, upward: 0 };
+    return `${formatInches(floorToHalf(forward))}/${formatInches(floorToHalf(upward))}`;
   }
   return formatFraction(characteristic.total);
 }

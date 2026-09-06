@@ -11,7 +11,7 @@ import {
   type RenderedAbility,
   type RenderedManeuver,
 } from '../model/abilities.ts';
-import { buildCharacteristics, type CharacteristicSet } from '../model/characteristics.ts';
+import { buildCharacteristics, characteristicNotes, type CharacteristicSet } from '../model/characteristics.ts';
 import { characteristicBonuses, collectDefences, type Defences } from '../model/defenses.ts';
 import { buildPower, totalPowerCost, type RenderedPower } from '../model/powers.ts';
 import { summarisePoints, type PointsSummary } from '../model/points.ts';
@@ -63,6 +63,7 @@ export function buildSheet(
     character.characteristics,
     system,
     characteristicBonuses(contributors),
+    character.powers,
   );
 
   const defences = collectDefences(
@@ -72,7 +73,9 @@ export function buildSheet(
   );
 
   const allSkills = character.skills.map((skill) => buildSkill(skill, system, characteristics));
-  const skills = allSkills.filter((skill) => !COMBAT_LEVEL_IDS.has(skill.source.xmlId));
+  // Combat levels are listed twice: once among the skills they were bought
+  // with, and once in their own table.
+  const skills = allSkills;
   const combatLevels = allSkills.filter((skill) => COMBAT_LEVEL_IDS.has(skill.source.xmlId));
 
   const perks = character.perks.map((perk) => buildSimple(perk, ruleFor(system, 'PERKS', perk.xmlId)));
@@ -80,14 +83,42 @@ export function buildSheet(
     buildSimple(talent, ruleFor(system, 'TALENTS', talent.xmlId)),
   );
   const disadvantages = character.disadvantages.map((disadvantage) =>
-    buildDisadvantage(disadvantage, ruleFor(system, 'DISADVANTAGES', disadvantage.xmlId)),
+    buildDisadvantage(disadvantage, system, ruleFor(system, 'DISADVANTAGES', disadvantage.xmlId)),
   );
-  const powers = character.powers.map((power) => buildPower(power, system, options));
-  const equipment = character.equipment.map((item) => buildPower(item, system, options));
+  const { slotsByFrameworkId } = groupByFramework(character.powers);
+  const frameworksById = new Map<string, Ability>();
+  for (const framework of character.powers) {
+    if (slotsByFrameworkId.has(framework.id)) {
+      frameworksById.set(framework.id, framework);
+    }
+  }
+  // A Linked modifier points at another power by id and prints what that power
+  // is called, which is the player's own name for it when they gave it one.
+  const linkTarget = (id: string): string | undefined => {
+    const target = [...character.powers, ...character.equipment].find((power) => power.id === id);
+    if (target === undefined) {
+      return undefined;
+    }
+    return target.name.trim().length > 0 ? target.name : target.alias;
+  };
+  const leaping = characteristics.byId.get('LEAPING');
+  const leapingNotes = leaping === undefined
+    ? ''
+    : characteristicNotes(leaping, characteristics, system, undefined);
+  const build = (power: Ability) =>
+    buildPower(power, system, {
+      ...options,
+      linkTarget,
+      leapingNotes,
+      ...(power.parentId !== undefined && frameworksById.has(power.parentId)
+        ? { framework: frameworksById.get(power.parentId) as Ability }
+        : {}),
+    });
+  const powers = character.powers.map(build);
+  const equipment = character.equipment.map(build);
   const strength = characteristics.byId.get('STR')?.total ?? 0;
   const maneuvers = character.martialArts.map((maneuver) => buildManeuver(maneuver, strength));
 
-  const { slotsByFrameworkId } = groupByFramework(character.powers);
   const frameworkIds = new Set(slotsByFrameworkId.keys());
   const slotIds = new Set(
     [...slotsByFrameworkId.values()].flat().map((slot: Ability) => slot.id),

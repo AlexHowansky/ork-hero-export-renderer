@@ -183,8 +183,9 @@ plain-language message on failure. Package with dual ESM/CJS output, `exports` m
 
 ## Verification
 
-* **Golden-file test (the gate):** `render(fixtures/Redshift.hdc, fixtures/Ork-16x9.hde)`
-  must equal `fixtures/Redshift.HTML` byte for byte. Because `CHARACTER_SAVE_TIMESTAMP`
+* **Golden-file test (the gate):** rendering each character in `fixtures/` with
+  `fixtures/Ork-16x9.hde` must equal that character's exported `.HTML` byte for
+  byte. Because `CHARACTER_SAVE_TIMESTAMP`
   and `APP_VERSION` are environment-dependent, the test pins them via `RenderOptions`
   (`Sun, 6 Sep 2026 10:36:50` / `20260405`) so the comparison stays deterministic.
   Diff output should be truncated to the first N differing lines to stay readable.
@@ -201,17 +202,23 @@ plain-language message on failure. Package with dual ESM/CJS output, `exports` m
 
 ## Status
 
-All seven phases are implemented. The acceptance gate passes: rendering
-`Redshift.hdc` with `Ork-16x9.hde` reproduces `Redshift.HTML` byte for byte in
-strict mode, verified through both the library and the CLI.
+All seven phases are implemented. The acceptance gate passes for both fixture
+characters: `Redshift.hdc` and `The Bismarck.hdc` each reproduce their exported
+sheet byte for byte in strict mode, verified through the library and the CLI.
 
-Four rules were inferred from this one character and are the likeliest places a
-second character will disagree. Each is commented where it lives:
+The Bismarck settled two of the rules Redshift alone had left to guesswork — how
+an Area Of Effect sizes its area, and how an adder priced in the rules data is
+costed — and brought the cost model into line with HERO Designer's own: totals,
+active costs and real costs each round as they are worked out, with a rounder
+that throws away everything past the first decimal before rounding a half down.
 
-* how an area power's radius scales, and how an Area Of Effect advantage's does;
-* how an adder priced only in the rules data is costed (`LEVELSTART`);
+What is still inferred from the fixtures, and commented where it lives:
+
 * the two-space separator before a subject, which Knowledge Skills alone do not use;
-* the reading of `ADDERSEPARATOR` on a disadvantage.
+* the reading of `ADDERSEPARATOR` on a disadvantage;
+* which modifiers open their bracket at the option, print it after their name, or
+  do not print it at all — a per-modifier decision HERO Designer makes in code
+  rather than in its rules data.
 
 ## Open items to settle during implementation
 

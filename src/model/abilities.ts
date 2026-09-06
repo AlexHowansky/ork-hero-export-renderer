@@ -2,7 +2,7 @@ import type { Ability } from '../hdc/types.ts';
 import { isYes } from '../hdc/parse.ts';
 import type { RuleNode, RuleSystem, SectionName } from '../rules/types.ts';
 import { formatDice, formatRoll, roundHalfUp } from './numbers.ts';
-import { adderText, adderTotal, advantageTotal } from './modifiers.ts';
+import { adderRulesFrom, adderString, adderText, adderTotal, advantageTotal } from './modifiers.ts';
 import type { CharacteristicSet } from './characteristics.ts';
 
 /**
@@ -59,18 +59,33 @@ function separatorFor(skill: Ability): string {
   return SINGLE_SPACE_SKILLS.has(skill.xmlId) ? ': ' : SUBJECT_SEPARATOR;
 }
 
-export function skillText(skill: Ability): string {
+/** Skills bought as levels, which read `+3 with All Combat` and price by option. */
+const LEVEL_SKILLS = new Set(['COMBAT_LEVELS', 'MENTAL_COMBAT_LEVELS', 'SKILL_LEVELS']);
+
+export function skillText(skill: Ability, rule?: RuleNode): string {
+  const option = skill.attributes['OPTION_ALIAS'] ?? '';
+  if (LEVEL_SKILLS.has(skill.xmlId)) {
+    return `${skill.levels >= 0 ? '+' : ''}${skill.levels} ${option}`.trim();
+  }
+
   const parts: string[] = [skill.alias];
   const input = skill.attributes['INPUT'];
-  const detail = input !== undefined && input.length > 0 ? input : skill.adders.map(adderText).join(', ');
-  if (detail.length > 0) {
-    parts.push(`${separatorFor(skill)}${detail}`);
+  const adders = adderString(skill.adders, adderRulesFrom(rule));
+  if (input !== undefined && input.length > 0) {
+    parts.push(`${separatorFor(skill)}${input}`);
+  } else if (adders.length > 0) {
+    // A skill that rolls brackets its subject — `Navigation (Land)` — where a
+    // familiarity, which never rolls, lists them after a colon instead.
+    parts.push(rolls(rule) ? ` (${adders})` : `${separatorFor(skill)}${adders}`);
   }
-  const option = skill.attributes['OPTION_ALIAS'];
-  if (option !== undefined && option.length > 0) {
+  if (option.length > 0) {
     parts.push(` (${option})`);
   }
   return parts.join('');
+}
+
+function rolls(rule: RuleNode | undefined): boolean {
+  return rule?.attributes?.['FAMILIARITYROLL'] !== undefined;
 }
 
 /**
@@ -95,10 +110,23 @@ export function skillRoll(
   return formatRoll(base.total + skill.levels * 5);
 }
 
-export function skillCost(skill: Ability): number {
-  const adders = adderTotal(skill.adders);
-  const base = skill.baseCost > 0 || adders > 0 ? skill.baseCost : DEFAULT_SKILL_COST;
-  return base + adders + skill.levels * SKILL_LEVEL_COST;
+/**
+ * A skill's price: whatever the character file says, plus its adders, plus its
+ * levels. Levels are priced by what they apply to — a combat skill level with
+ * every attack is 8 points where one with a single attack is 2 — so the option
+ * the player chose is consulted before the skill's own rate.
+ */
+export function skillCost(skill: Ability, rule?: RuleNode): number {
+  const adders = adderTotal(skill.adders, adderRulesFrom(rule));
+  const option = rule?.children?.find((child) => child.id === skill.attributes['OPTIONID']);
+  const perLevel = Number(
+    skill.attributes['LVLCOST'] ?? option?.attributes?.['LVLCOST'] ?? rule?.attributes?.['LVLCOST'] ?? SKILL_LEVEL_COST,
+  );
+  const per = Number(skill.attributes['LVLVAL'] ?? option?.attributes?.['LVLVAL'] ?? rule?.attributes?.['LVLVAL'] ?? 1) || 1;
+  const base = LEVEL_SKILLS.has(skill.xmlId) || skill.baseCost > 0 || adders > 0
+    ? skill.baseCost
+    : DEFAULT_SKILL_COST;
+  return base + adders + (skill.levels * perLevel) / per;
 }
 
 export function buildSkill(
@@ -106,11 +134,12 @@ export function buildSkill(
   system: RuleSystem,
   characteristics: CharacteristicSet,
 ): RenderedAbility {
-  const rawCost = skillCost(skill);
+  const rule = ruleFor(system, 'SKILLS', skill.xmlId);
+  const rawCost = skillCost(skill, rule);
   return {
     source: skill,
-    text: skillText(skill),
-    roll: skillRoll(skill, ruleFor(system, 'SKILLS', skill.xmlId), characteristics),
+    text: skillText(skill, rule),
+    roll: skillRoll(skill, rule, characteristics),
     rawCost,
     cost: roundHalfUp(rawCost),
     notes: skill.notes,
@@ -132,7 +161,7 @@ export function simpleText(ability: Ability): string {
   if (option !== undefined && option.length > 0) {
     parts.push(`: ${option}`);
   }
-  const adders = ability.adders.map(adderText);
+  const adders = ability.adders.map((adder) => adderText(adder));
   if (adders.length > 0) {
     parts.push(` (${adders.join('; ')})`);
   }
@@ -149,8 +178,11 @@ export function levelledCost(ability: Ability, rule: RuleNode | undefined): numb
   const perLevel = Number(attributes['LVLCOST'] ?? 0);
   const per = Number(attributes['LVLVAL'] ?? 1);
   const base = ability.baseCost > 0 ? ability.baseCost : Number(attributes['BASECOST'] ?? 0);
-  const levels = per > 0 && perLevel > 0 ? (ability.levels * perLevel) / per : 0;
-  return base + adderTotal(ability.adders) + levels;
+  // A Vehicles & Bases perk is not bought in levels but in the points the
+  // vehicle itself is worth, at a point of the character's per five of it.
+  const units = Number(ability.attributes['BASEPOINTS'] ?? ability.levels);
+  const levels = per > 0 && perLevel > 0 ? (units * perLevel) / per : 0;
+  return base + adderTotal(ability.adders, adderRulesFrom(rule)) + levels;
 }
 
 /**
@@ -214,11 +246,15 @@ function isShown(adder: Ability): boolean {
   return adder.attributes['SHOWALIAS'] === undefined || isYes(adder.attributes['SHOWALIAS']);
 }
 
-export function buildDisadvantage(disadvantage: Ability, rule?: RuleNode): RenderedAbility {
+export function buildDisadvantage(
+  disadvantage: Ability,
+  system: RuleSystem,
+  rule?: RuleNode,
+): RenderedAbility {
   // Modifiers multiply, as they do for powers: a Vulnerability's "2 x STUN"
   // multiplier is +1, which turns a 5-point disadvantage into a 10-point one.
-  const base = disadvantage.baseCost + adderTotal(disadvantage.adders);
-  const rawCost = base * (1 + advantageTotal(disadvantage.modifiers));
+  const base = disadvantage.baseCost + adderTotal(disadvantage.adders, adderRulesFrom(rule));
+  const rawCost = base * (1 + advantageTotal(disadvantage.modifiers, system));
   return {
     source: disadvantage,
     text: disadvantageText(disadvantage, rule),

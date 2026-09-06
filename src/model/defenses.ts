@@ -99,6 +99,15 @@ export function characteristicBonuses(sources: readonly Ability[]): Bonus[] {
       const points = source.levels * COMBAT_LUCK_PER_LEVEL;
       bonuses.push({ id: 'PD', amount: points }, { id: 'ED', amount: points });
     }
+    // Armor and Force Field are bought as points of defence and say so on the
+    // characteristic line, where Damage Resistance only makes existing defence
+    // resistant and adds nothing.
+    if ((source.xmlId === 'ARMOR' || source.xmlId === 'FORCEFIELD') && source.attributes['AFFECTS_PRIMARY'] === 'Yes') {
+      bonuses.push(
+        { id: 'PD', amount: number(source.attributes['PDLEVELS']) },
+        { id: 'ED', amount: number(source.attributes['EDLEVELS']) },
+      );
+    }
   }
   return bonuses;
 }
