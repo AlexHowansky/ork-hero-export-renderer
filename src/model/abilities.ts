@@ -1,7 +1,7 @@
 import type { Ability } from '../hdc/types.ts';
 import { isYes } from '../hdc/parse.ts';
 import type { RuleNode, RuleSystem, SectionName } from '../rules/types.ts';
-import { formatRoll, roundHalfUp } from './numbers.ts';
+import { formatDice, formatRoll, roundHalfUp } from './numbers.ts';
 import { adderText, adderTotal, advantageTotal } from './modifiers.ts';
 import type { CharacteristicSet } from './characteristics.ts';
 
@@ -18,6 +18,12 @@ const DEFAULT_SKILL_COST = 3;
 const SKILL_LEVEL_COST = 2;
 /** Skills bought against no characteristic roll at this, plus levels. */
 const GENERAL_SKILL_ROLL = 11;
+
+/**
+ * What HERO Designer puts between a name and its subject. It is two spaces,
+ * not one — "Language:  German", "Hunted:  Overwatch".
+ */
+const SUBJECT_SEPARATOR = ':  ';
 
 export interface RenderedAbility {
   readonly source: Ability;
@@ -42,12 +48,23 @@ export function ruleFor(system: RuleSystem, section: SectionName, id: string): R
  * colon, as do a familiarity's adders when there is no input. An `OPTION_ALIAS`
  * is parenthesised.
  */
+/**
+ * Knowledge Skills are written with a single space — "KS: logistics" — where
+ * every other skill and disadvantage uses two. Nothing in the rules data
+ * distinguishes them, so this follows the exported sheet rather than a rule.
+ */
+const SINGLE_SPACE_SKILLS = new Set(['KNOWLEDGE_SKILL']);
+
+function separatorFor(skill: Ability): string {
+  return SINGLE_SPACE_SKILLS.has(skill.xmlId) ? ': ' : SUBJECT_SEPARATOR;
+}
+
 export function skillText(skill: Ability): string {
   const parts: string[] = [skill.alias];
   const input = skill.attributes['INPUT'];
   const detail = input !== undefined && input.length > 0 ? input : skill.adders.map(adderText).join(', ');
   if (detail.length > 0) {
-    parts.push(`: ${detail}`);
+    parts.push(`${separatorFor(skill)}${detail}`);
   }
   const option = skill.attributes['OPTION_ALIAS'];
   if (option !== undefined && option.length > 0) {
@@ -164,7 +181,7 @@ export function disadvantageText(disadvantage: Ability, rule?: RuleNode): string
     .filter((part) => part.length > 0)
     .join(' ');
   if (input.length > 0) {
-    text += `: ${input}`;
+    text += `${SUBJECT_SEPARATOR}${input}`;
   }
 
   // The first option follows the subject with a comma, unless the rules give
@@ -234,16 +251,26 @@ export interface RenderedManeuver {
   readonly cost: number;
 }
 
-/** Martial maneuvers print their own columns straight from the character file. */
-export function buildManeuver(maneuver: Ability): RenderedManeuver {
+/**
+ * Martial maneuvers print their columns from the character file, except that an
+ * effect carries placeholders for damage the character rolls: a maneuver worth
+ * two damage classes reads `[STRDC] to Disarm`, which for a STR 18 character
+ * becomes `28 STR to Disarm`.
+ */
+export function buildManeuver(maneuver: Ability, strength = 0): RenderedManeuver {
   const attributes = maneuver.attributes;
+  const damage = (isYes(attributes['ADDSTR']) ? strength : 0) + Number(attributes['DC'] ?? 0) * 5;
+  const effect = (attributes['EFFECT'] ?? '')
+    .replaceAll('[STRDC]', `${damage} STR`)
+    .replaceAll('[NORMALDC]', formatDice(damage))
+    .replaceAll('[KILLINGDC]', `${formatDice(damage)}K`);
   return {
     source: maneuver,
     name: maneuver.alias,
     phase: attributes['PHASE'] ?? '',
     ocv: attributes['OCV'] ?? '',
     dcv: attributes['DCV'] ?? '',
-    effect: attributes['EFFECT'] ?? '',
+    effect,
     cost: roundHalfUp(maneuver.baseCost),
   };
 }

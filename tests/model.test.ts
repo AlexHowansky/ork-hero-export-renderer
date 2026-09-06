@@ -91,7 +91,7 @@ describe('characteristics', () => {
     COM: ['13', '10', 2, ''],
     PD: ['12', '4', 2, '12 PD (12 rPD)'],
     ED: ['12', '3', 3, '12 ED (12 rED)'],
-    SPD: ['5', '3.6', 14, 'Phases: 3, 5, 8, 10, 12'],
+    SPD: ['5', '3.6', 14, 'Phases:  3, 5, 8, 10, 12'],
     REC: ['15', '7', 16, ''],
     END: ['35', '32', 2, ''],
     STUN: ['35', '29', 6, ''],
@@ -153,13 +153,13 @@ describe('skills', () => {
       ['14-', 'Bribery', 5], ['13-', 'Bugging', 3], ['13-', 'Bureaucratics', 3],
       ['13-', 'Computer Programming', 3], ['13-', 'Demolitions', 3], ['13-', 'Disguise', 3],
       ['13-', 'Electronics', 3], ['13-', 'Gambling', 3], ['13-', 'KS: logistics', 3],
-      ['13-', 'KS: US military', 3], ['', 'Language: German (basic conversation)', 1],
+      ['13-', 'KS: US military', 3], ['', 'Language:  German (basic conversation)', 1],
       ['13-', 'Mechanics', 3], ['14-', 'Oratory', 5], ['13-', 'Paramedics', 3],
-      ['14-', 'Persuasion', 5], ['13-', 'Security Systems', 3], ['11-', 'Science Skill: physics', 2],
+      ['14-', 'Persuasion', 5], ['13-', 'Security Systems', 3], ['11-', 'Science Skill:  physics', 2],
       ['13-', 'Shadowing', 3], ['14-', 'Sleight Of Hand', 3], ['14-', 'Stealth', 3],
       ['13-', 'Systems Operation', 3], ['13-', 'Tactics', 3], ['14-', 'Teamwork', 3],
-      ['', 'TF: Common Motorized Ground Vehicles', 2], ['13-', 'Tracking', 3],
-      ['', 'WF: Common Melee Weapons, Small Arms', 4],
+      ['', 'TF:  Common Motorized Ground Vehicles', 2], ['13-', 'Tracking', 3],
+      ['', 'WF:  Common Melee Weapons, Small Arms', 4],
     ];
     const built = character.skills.map((skill) => buildSkill(skill, system, characteristics));
     expect(built.map((s) => [s.roll, s.text, s.cost])).toEqual(expected);
@@ -187,19 +187,19 @@ describe('talents', () => {
 describe('disadvantages', () => {
   test('reproduces all 13 rows and the total', () => {
     const expected: [string, number][] = [
-      ["Distinctive Features: doesn't age (Easily Concealed; Noticed and Recognizable; Detectable By Commonly-Used Senses)", 5],
-      ['Distinctive Features: abnormally slow biology (pulse, breathing rate, blinking, etc) (Not Concealable; Noticed and Recognizable; Detectable By Commonly-Used Senses)', 15],
-      ['Hunted: Overwatch 8- (Mo Pow; Watching)', 5],
-      ['Hunted: US Government 8- (Mo Pow; Watching)', 5],
-      ['Physical Limitation: distorted sense of time passage (Frequently; Slightly Impairing)', 10],
-      ['Psychological Limitation: emotionally distant (Uncommon; Strong)', 10],
-      ['Psychological Limitation: protect the innocent (Common; Strong)', 15],
-      ['Psychological Limitation: uses powers sparingly (Very Common; Strong)', 20],
-      ['Reputation: "The boy who never grew old", 11-', 10],
-      ['Social Limitation: constantly fidgety and impatient (Frequently; Major)', 15],
-      ['Social Limitation: underage (Very Frequently; Minor)', 15],
-      ['Social Limitation: secret identity (Frequently; Major)', 15],
-      ['Vulnerability: 2 x STUN high energy radiation (Uncommon)', 10],
+      ["Distinctive Features:  doesn't age (Easily Concealed; Noticed and Recognizable; Detectable By Commonly-Used Senses)", 5],
+      ['Distinctive Features:  abnormally slow biology (pulse, breathing rate, blinking, etc) (Not Concealable; Noticed and Recognizable; Detectable By Commonly-Used Senses)', 15],
+      ['Hunted:  Overwatch 8- (Mo Pow; Watching)', 5],
+      ['Hunted:  US Government 8- (Mo Pow; Watching)', 5],
+      ['Physical Limitation:  distorted sense of time passage (Frequently; Slightly Impairing)', 10],
+      ['Psychological Limitation:  emotionally distant (Uncommon; Strong)', 10],
+      ['Psychological Limitation:  protect the innocent (Common; Strong)', 15],
+      ['Psychological Limitation:  uses powers sparingly (Very Common; Strong)', 20],
+      ['Reputation:  "The boy who never grew old", 11-', 10],
+      ['Social Limitation:  constantly fidgety and impatient (Frequently; Major)', 15],
+      ['Social Limitation:  underage (Very Frequently; Minor)', 15],
+      ['Social Limitation:  secret identity (Frequently; Major)', 15],
+      ['Vulnerability:  2 x STUN high energy radiation (Uncommon)', 10],
     ];
     const built = character.disadvantages.map((d) =>
       buildDisadvantage(d, ruleFor(system, 'DISADVANTAGES', d.xmlId)),
@@ -220,7 +220,7 @@ describe('disadvantages', () => {
 
 describe('martial maneuvers', () => {
   test('reads the columns from the character file', () => {
-    const built = character.martialArts.map(buildManeuver);
+    const built = character.martialArts.map((m) => buildManeuver(m, 18));
     expect(built.map((m) => [m.name, m.phase, m.ocv, m.dcv, m.cost])).toEqual([
       ['Martial Dodge', '1/2', '--', '+5', 4],
       ['Passing Disarm', '1/2', '-1', '-1', 5],

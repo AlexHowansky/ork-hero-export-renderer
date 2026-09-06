@@ -42,13 +42,25 @@ const FRACTIONAL_BASE = new Set(['SPD']);
 /** Characteristics that show a roll on the sheet. */
 const HAS_ROLL = new Set(['STR', 'DEX', 'CON', 'BODY', 'INT', 'EGO', 'PRE', 'COM']);
 
-/** Resolution order: a figured characteristic needs its sources computed first. */
-const ORDER = [
+/**
+ * Every characteristic name either edition uses, in resolution order — a
+ * figured characteristic needs its sources computed first.
+ *
+ * The list also answers "is this a characteristic?" for names the current
+ * game system does not have. A fifth-edition character has no OMCV, and the
+ * template's `<!--OMCV-->6<!--/OMCV-->` must then render as nothing rather
+ * than being passed through as an unknown directive.
+ */
+export const CHARACTERISTIC_IDS = [
   'STR', 'DEX', 'CON', 'BODY', 'INT', 'EGO', 'PRE', 'COM',
   'OCV', 'DCV', 'OMCV', 'DMCV', 'SPD', 'PD', 'ED', 'REC', 'END', 'STUN',
   'RUNNING', 'SWIMMING', 'LEAPING', 'FLIGHT', 'GLIDING', 'SWINGING',
   'TELEPORTATION', 'TUNNELING',
-];
+] as const;
+
+export function isCharacteristicName(name: string): boolean {
+  return (CHARACTERISTIC_IDS as readonly string[]).includes(name);
+}
 
 export interface CharacteristicSet {
   readonly byId: ReadonlyMap<string, Characteristic>;
@@ -131,7 +143,7 @@ export function buildCharacteristics(
 /** Characteristics the rules define, in dependency order. */
 function orderedIds(rules: ReadonlyMap<string, RuleNode>): string[] {
   const known = [...rules.keys()];
-  const ordered = ORDER.filter((id) => rules.has(id));
+  const ordered: string[] = CHARACTERISTIC_IDS.filter((id) => rules.has(id));
   return [...ordered, ...known.filter((id) => !ordered.includes(id))];
 }
 
@@ -220,7 +232,8 @@ export function characteristicNotes(
         ? ''
         : `${defenses.total} ${id} (${defenses.resistant} r${id})`;
     case 'SPD':
-      return `Phases: ${phases(total).join(', ')}`;
+      // Two spaces after the colon, as everywhere else on the sheet.
+      return `Phases:  ${phases(total).join(', ')}`;
     case 'LEAPING': {
       const forward = movementDistance(characteristic);
       return `${formatInches(forward)} forward, ${formatInches(Math.floor(forward) / 2)} upward`;

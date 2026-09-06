@@ -4,20 +4,23 @@ Renders HERO System character sheets by applying a HERO Designer export template
 (`*.hde`) to a character file (`*.hdc`), producing the same HTML that HERO
 Designer's own export function produces — without needing HERO Designer.
 
-**Status: in progress.** Phases 1–4 are complete: the game-rules layer, reading
-character files, the template engine, and the rules calculations. The tag
-vocabulary and the rendering CLI are still to come. See `PLAN.md`.
+**Status: in progress.** Phases 1–5 are complete, and the library now renders a
+character sheet end to end. What remains is the whole-document replacement pass
+and the command-line tool. See `PLAN.md`.
 
-Against the reference character, the rules engine reproduces the exported sheet
-exactly for all 17 characteristics, all 29 skills, both talents, all 13
-disadvantages, all 3 martial maneuvers, and 7 of 9 powers. Two known gaps
-remain, both the same missing piece — the area a power covers:
+Rendering the reference character reproduces the sheet HERO Designer exported
+from it on **1,823 of 1,831 lines**, once the template's own fraction
+replacements are applied — those are phase 6 and account for 11 further lines.
 
-* Change Environment's `4" radius` and the points its `-3 DCV` adder is worth.
+The eight remaining lines all trace to one missing piece of the rules: the area
+a power covers.
+
+* Change Environment's `4" radius`, and the points its `-3 DCV` adder is worth.
 * The `4"` in Energy Blast's `Area Of Effect (4" Radius; +1)`.
 
-That single gap is the whole of the points discrepancy: powers total 121 rather
-than 124, so experience spent reads 13 rather than 16.
+Because the first of those changes a multipower slot's price, it also moves the
+totals: powers come to 121 rather than 124, so experience spent reads 13 rather
+than 16.
 
 ## Game rules data
 
@@ -112,6 +115,29 @@ Figured characteristics are derived from the rules data rather than a
 hard-coded table — `Main.hdt` gives STR `PDINCREASE="1" PDINCREASELEVELS="5"`,
 so 5 points of STR add 1 to PD's base — which means the sixth-edition tables
 fall out of the same code.
+
+## Rendering a sheet
+
+```ts
+import {
+  RulesLibrary, parseCharacterFile, parseTemplate,
+  renderTemplate, buildSheet, createContext,
+} from 'ork-hero-export-renderer';
+
+const library = await RulesLibrary.load();
+const character = parseCharacterFile(readFileSync('Redshift.hdc'), 'Redshift.hdc');
+const sheet = buildSheet(character, library.system(character.templateId));
+const template = parseTemplate(readFileSync('Ork-16x9.hde', 'utf8'));
+
+const html = renderTemplate(template, createContext(sheet, {
+  characterFileName: 'Redshift.hdc',
+  saveTimestamp: statSync('Redshift.hdc').mtime,
+  appVersion: '20260405',
+}));
+```
+
+`<!--MATH-->` expressions are parsed rather than evaluated, so a template can
+never execute anything.
 
 ## Development
 
