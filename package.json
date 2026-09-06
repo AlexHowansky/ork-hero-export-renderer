@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "Render HERO System character sheets by applying a HERO Designer export template (.hde) to a character file (.hdc).",
   "license": "MIT",
+  "author": "Alex Howansky",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexHowansky/ork-hero-export-renderer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AlexHowansky/ork-hero-export-renderer/issues"
+  },
+  "homepage": "https://github.com/AlexHowansky/ork-hero-export-renderer#readme",
   "type": "module",
   "engines": {
     "node": ">=20"
