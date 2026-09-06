@@ -4,9 +4,9 @@ Renders HERO System character sheets by applying a HERO Designer export template
 (`*.hde`) to a character file (`*.hdc`), producing the same HTML that HERO
 Designer's own export function produces — without needing HERO Designer.
 
-**Status: in progress.** Phase 1 (the game-rules layer) and phase 2 (reading
-character files) are complete. The template engine, the rules calculations and
-the rendering CLI are still to come. See `PLAN.md`.
+**Status: in progress.** Phases 1–3 are complete: the game-rules layer, reading
+character files, and the template engine. The rules calculations, the tag
+vocabulary and the rendering CLI are still to come. See `PLAN.md`.
 
 ## Game rules data
 
@@ -60,6 +60,30 @@ silent rather than loud:
 * Prose fields store line breaks as CRLF, but HERO Designer's exports contain no
   carriage returns. XML line-ending normalization is applied on read, as the
   spec requires, so what you get back matches what an export contains.
+
+## Export templates
+
+An export template is HTML with directives written as comments. There is one
+syntax and no other: `<!--NAME-->` is a tag, and `<!--NAME-->` … `<!--/NAME-->`
+is a container whose body is conditional, repeated, or transformed.
+
+```ts
+import { parseTemplate, renderTemplate } from 'ork-hero-export-renderer';
+
+const template = parseTemplate(readFileSync('Ork-16x9.hde', 'utf8'));
+const html = renderTemplate(template, context);
+```
+
+Three behaviours the engine copies deliberately, because an exported sheet
+depends on each:
+
+* **Unknown directives pass through verbatim.** HERO Designer's own exports
+  contain `<!--PRIMARY_OMCV-->` because that name is not in its tag table.
+* **Whether a name is a container is decided by the template**, not by a fixed
+  list — a name that is never closed is a tag. The vocabulary is partly
+  generated (`STR_VAL`, `RUNNING_PRIMARY`), so no list could be complete.
+* **A false conditional collapses in place**, leaving the whitespace around it,
+  which is why exported sheets contain `class="text-start  "` with two spaces.
 
 ## Development
 

@@ -31,6 +31,26 @@ export type {
   CharacterInfo,
 } from './hdc/types.ts';
 
+export { parseTemplate, type ParseTemplateOptions } from './template/parser.ts';
+export { tokenize, findContainerNames, type Token, type TextToken, type DirectiveToken } from './template/lexer.ts';
+export {
+  renderTemplate,
+  renderNodes,
+  passThroughContext,
+  type RenderContext,
+} from './template/renderer.ts';
+export {
+  isTextNode,
+  type ContainerNode,
+  type LiteralReplacement,
+  type ParsedTemplate,
+  type RegexReplacement,
+  type Replacement,
+  type TagNode,
+  type TemplateNode,
+  type TextNode,
+} from './template/ast.ts';
+
 export { RulesLibrary, defaultRulesDirectory } from './rules/load.ts';
 export { resolveSystem, indexSection } from './rules/merge.ts';
 export {
