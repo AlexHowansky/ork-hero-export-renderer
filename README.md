@@ -68,8 +68,8 @@ const system = library.system('Superheroic'); // chain: Main -> Superheroic
 ```
 
 The rules data is derived from Hero Games' `*.hdt` files and is their
-copyrighted material. It is included here for use with characters you built in
-your own copy of HERO Designer.
+copyrighted material, so it is not distributed with this package. Extract it
+yourself, from your own copy of HERO Designer, with the command above.
 
 ## Reading a character file
 

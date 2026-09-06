@@ -30,11 +30,10 @@
   },
   "files": [
     "dist",
-    "rules",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli/render.js dist/cli/extract-rules.js",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli/render.js dist/cli/extract-rules.js",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "extract-rules": "bun run src/cli/extract-rules.ts",

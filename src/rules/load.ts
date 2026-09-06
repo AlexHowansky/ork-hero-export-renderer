@@ -6,7 +6,10 @@ import { silentLogger, type Logger } from '../util/logger.ts';
 import { resolveSystem } from './merge.ts';
 import { RULES_FORMAT_VERSION, type RuleSystem, type RuleTemplate, type RulesManifest } from './types.ts';
 
-/** Default location of the bundled data, relative to this file. */
+/**
+ * Default location of the extracted data, relative to this file. The rules are
+ * not shipped with the package; `extract-rules` writes them here.
+ */
 export function defaultRulesDirectory(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), '../../rules');
 }
