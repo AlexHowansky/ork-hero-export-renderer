@@ -259,8 +259,8 @@ describe('modifiers', () => {
 });
 
 describe('powers', () => {
-  test('describes and prices the powers it covers', () => {
-    const built = character.powers.map((p) => buildPower(p, system, { strict: false }));
+  test('describes and prices every power on the sheet', () => {
+    const built = character.powers.map((p) => buildPower(p, system));
     const rows = built.map((p) => [p.end, p.text, p.cost] as const);
     expect(rows[0]).toEqual(['0', 'Damage Resistance (6 PD/6 ED)', '6']);
     expect(rows[1]).toEqual(['0', 'Power Defense (5 points)', '5']);
@@ -276,6 +276,22 @@ describe('powers', () => {
       '7',
       'Healing STUN 5d6, Ranged (+1/2) (75 Active Points); Gestures (-1/4)',
       '6u',
+    ]);
+    // An area power folds its effects into its own description, and prices its
+    // adder from the rules rather than the character file.
+    expect(rows[4]).toEqual([
+      '3',
+      "Change Environment 4\" radius (-3 DCV), Reduced Endurance (1/2 END; +1/4), " +
+        "Affects Desolidified One Special Effect of Desolidification " +
+        "(only if the body's form is still reasonably intact; +1/4), Selective Target (+1/2), " +
+        'Based On EGO Combat Value (Mental Defense applies; +1) (75 Active Points)',
+      '7u',
+    ]);
+    // An Area Of Effect names the area it covers, scaled to the power it is on.
+    expect(rows[5]).toEqual([
+      '7',
+      'Energy Blast 7d6, Area Of Effect (4" Radius; +1) (70 Active Points)',
+      '7u',
     ]);
   });
 
@@ -320,7 +336,6 @@ describe('points', () => {
       character.martialArts.map(buildManeuver).reduce((sum, m) => sum + m.cost, 0),
     );
     expect([characteristics.totalCost, skills, talents, martialArts]).toEqual([168, 92, 18, 14]);
-    // Powers reach 124 once Change Environment's area is worked out; see README.
-    expect(totalPowerCost(character.powers.map((p) => buildPower(p, system, { strict: false })))).toBe(121);
+    expect(totalPowerCost(character.powers.map((p) => buildPower(p, system)))).toBe(124);
   });
 });

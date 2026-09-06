@@ -4,6 +4,7 @@ import { RulesLibrary } from '../src/rules/load.ts';
 import { parseCharacterFile } from '../src/hdc/parse.ts';
 import { parseTemplate } from '../src/template/parser.ts';
 import { renderTemplate } from '../src/template/renderer.ts';
+import { applyReplacements } from '../src/template/postprocess.ts';
 import { buildSheet, type Sheet } from '../src/tags/sheet.ts';
 import { createContext, formatTimestamp } from '../src/tags/context.ts';
 import { evaluateMath } from '../src/tags/math.ts';
@@ -21,44 +22,43 @@ let expected: string;
 beforeAll(async () => {
   const library = await RulesLibrary.load();
   const character = parseCharacterFile(readFileSync('fixtures/Redshift.hdc'), 'Redshift.hdc');
-  sheet = buildSheet(character, library.system(character.templateId), { strict: false });
+  sheet = buildSheet(character, library.system(character.templateId), { strict: true });
   const template = parseTemplate(readFileSync('fixtures/Ork-16x9.hde', 'utf8'), {
     source: 'Ork-16x9.hde',
   });
-  rendered = renderTemplate(
-    template,
-    createContext(sheet, {
-      strict: false,
-      characterFileName: 'Redshift.hdc',
-      saveTimestamp: SAVED_AT,
-      appVersion: APP_VERSION,
-    }),
+  // Strict throughout: nothing is guessed at or skipped to make this pass.
+  rendered = applyReplacements(
+    renderTemplate(
+      template,
+      createContext(sheet, {
+        strict: true,
+        characterFileName: 'Redshift.hdc',
+        saveTimestamp: SAVED_AT,
+        appVersion: APP_VERSION,
+      }),
+    ),
+    template.replacements,
+    { strict: true },
   );
   expected = readFileSync('fixtures/Redshift.HTML', 'utf8');
 });
-
-/** The fraction replacements the template declares are applied in phase 6. */
-function applyFractions(line: string): string {
-  return line
-    .replace(/\b1\/2d(\d)\b/g, '½d$1')
-    .replaceAll('1/2', '½')
-    .replaceAll('1/4', '¼');
-}
 
 describe('rendering the reference character', () => {
   test('produces the same number of lines as the exported sheet', () => {
     expect(rendered.split('\n')).toHaveLength(expected.split('\n').length);
   });
 
-  // Everything except the eight lines that depend on a power's area, which is
-  // the one piece of the rules still to work out. See README.
-  test('matches the exported sheet on all but the eight known lines', () => {
+  // The acceptance gate: pure TypeScript reproducing HERO Designer's own
+  // export of this character, to the byte.
+  test('reproduces the exported sheet exactly', () => {
     const ours = rendered.split('\n');
     const theirs = expected.split('\n');
     const differing = theirs
-      .map((line, index) => (applyFractions(ours[index] ?? '') === line ? undefined : index + 1))
+      .map((line, index) => (ours[index] === line ? undefined : index + 1))
       .filter((line): line is number => line !== undefined);
-    expect(differing).toEqual([962, 966, 972, 1048, 1051, 1055, 1062, 1106]);
+    // Reported as line numbers so a regression says where, not just that.
+    expect(differing).toEqual([]);
+    expect(rendered).toBe(expected);
   });
 
   test('embeds the character portrait byte for byte', () => {
@@ -102,6 +102,12 @@ describe('rendering the reference character', () => {
     // Unrounded for OCV, rounded but still a double for DCV.
     expect(rendered).toContain('8.666666666666666');
     expect(rendered).toContain('9.0');
+  });
+
+  test('applies the template’s own fraction replacements', () => {
+    expect(rendered).toContain('HTH Damage 3 ½d6');
+    expect(rendered).toContain('Reduced Endurance (½ END; +¼)');
+    expect(rendered).not.toContain('1/2d6');
   });
 });
 

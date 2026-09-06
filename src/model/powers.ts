@@ -5,7 +5,6 @@ import { formatDice, formatInches, roundDown, roundHalfUp } from './numbers.ts';
 import {
   activeCost,
   adderText,
-  adderTotal,
   advantages,
   limitations,
   modifierText,
@@ -46,6 +45,8 @@ const DICE_POWERS = new Set([
   'ENERGYBLAST', 'HEALING', 'DRAIN', 'AID', 'TRANSFER', 'EGOATTACK', 'RKA', 'HKA',
   'KILLINGATTACK', 'HANDTOHANDATTACK', 'ENTANGLE', 'FLASH', 'TELEPATHY', 'MINDCONTROL',
 ]);
+/** Powers that cover an area and describe their effects inside it. */
+const AREA_POWERS = new Set(['CHANGEENVIRONMENT']);
 /** Powers that name the characteristic they act on in their description. */
 const ADJUSTMENT_POWERS = new Set(['HEALING', 'DRAIN', 'AID', 'TRANSFER', 'SUCCOR', 'ABSORPTION']);
 /** Elements that are frameworks rather than powers in their own right. */
@@ -83,13 +84,55 @@ export function buildPower(
 
 /** Levels times the per-level price from the rules, plus any adders. */
 export function basePointsOf(power: Ability, rule: RuleNode | undefined): number {
+  const adders = power.adders.reduce((sum, adder) => sum + adderCost(adder, rule), 0);
   if (power.baseCost > 0) {
-    return power.baseCost + adderTotal(power.adders);
+    return power.baseCost + adders;
   }
   const attributes = rule?.attributes ?? {};
   const perLevel = Number(attributes['LVLCOST'] ?? 0);
   const per = Number(attributes['LVLVAL'] ?? 1) || 1;
-  return (power.levels * perLevel) / per + adderTotal(power.adders);
+  return (power.levels * perLevel) / per + adders;
+}
+
+/**
+ * What an adder on a power is worth.
+ *
+ * The character file often records no cost, leaving it to the rules — Change
+ * Environment's `-3 DCV` says `BASECOST="0"` and the rules price it per level.
+ * `LEVELSTART` is where charging begins, so a three-level adder that starts at
+ * one costs for two.
+ *
+ * Inferred from the reference character; worth revisiting when more characters
+ * are available to check it against.
+ */
+export function adderCost(adder: Ability, powerRule: RuleNode | undefined): number {
+  if (adder.baseCost !== 0) {
+    return adder.levels > 0 ? adder.baseCost * adder.levels : adder.baseCost;
+  }
+  const rule = powerRule?.children?.find((child) => child.id === adder.xmlId);
+  const perLevel = Number(rule?.attributes?.['LVLCOST'] ?? 0);
+  if (perLevel === 0) {
+    return 0;
+  }
+  const start = Number(rule?.attributes?.['LEVELSTART'] ?? 0);
+  return Math.max(0, adder.levels - start) * perLevel;
+}
+
+/**
+ * How far a power reaches, in inches.
+ *
+ * A power with its own area doubles it per level above the first, so a
+ * three-level Change Environment covers 4". An Area Of Effect advantage instead
+ * scales with the power it is bought on, one inch per ten base points.
+ *
+ * Both are inferred from the reference character.
+ */
+export function areaRadius(levels: number): number {
+  return 2 ** Math.max(0, levels - 1);
+}
+
+export function advantageRadius(basePoints: number): number {
+  return roundHalfUp(basePoints / 10);
 }
 
 function powerText(
@@ -105,12 +148,18 @@ function powerText(
     parts.push(`, ${shown.join(', ')}`);
   }
 
-  const positive = advantages(power.modifiers).map((modifier) => modifierText(modifier).text);
+  // An Area Of Effect names the area it covers, which depends on the power it
+  // is bought on rather than on the advantage itself.
+  const areaPrefix = `${formatInches(advantageRadius(basePoints))} `;
+  const positive = advantages(power.modifiers).map(
+    (modifier) => modifierText(modifier, modifier.xmlId === 'AOE' ? areaPrefix : '').text,
+  );
   if (positive.length > 0) {
     parts.push(`, ${positive.join(', ')}`);
   }
 
   const negative = limitations(power.modifiers).map((modifier) => modifierText(modifier).text);
+
   if (power.modifiers.length > 0) {
     parts.push(` (${roundHalfUp(activeCost(basePoints, power.modifiers))} Active Points)`);
   }
@@ -141,6 +190,11 @@ function baseText(power: Ability, rule: RuleNode | undefined, options: BuildPowe
   if (POINT_DEFENCES.has(power.xmlId)) {
     return `${prefix}${alias} (${power.levels} points)`;
   }
+  if (AREA_POWERS.has(power.xmlId)) {
+    const effects = power.adders.map(adderText).join(', ');
+    const detail = effects.length > 0 ? ` (${effects})` : '';
+    return `${prefix}${alias} ${formatInches(areaRadius(power.levels))} radius${detail}`;
+  }
   if (DISTANCE_POWERS.has(power.xmlId)) {
     return `${prefix}${alias} ${formatInches(power.levels)}`;
   }
@@ -162,9 +216,9 @@ function baseText(power: Ability, rule: RuleNode | undefined, options: BuildPowe
   return rule?.attributes?.['DISPLAY'] ?? alias;
 }
 
-/** Change Environment and the familiarities fold their adders into the base text. */
+/** Area powers fold their adders into the base text rather than listing them after. */
 function usesAddersInBaseText(power: Ability): boolean {
-  return power.xmlId === 'CHANGEENVIRONMENT';
+  return AREA_POWERS.has(power.xmlId);
 }
 
 /**

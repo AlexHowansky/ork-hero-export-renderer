@@ -34,6 +34,12 @@ export type {
 export { parseTemplate, type ParseTemplateOptions } from './template/parser.ts';
 export { tokenize, findContainerNames, type Token, type TextToken, type DirectiveToken } from './template/lexer.ts';
 export {
+  applyReplacements,
+  translatePattern,
+  translateReplacement,
+  type PostProcessOptions,
+} from './template/postprocess.ts';
+export {
   renderTemplate,
   renderNodes,
   passThroughContext,

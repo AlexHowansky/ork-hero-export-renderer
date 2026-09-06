@@ -24,11 +24,11 @@ export interface ModifierText {
  * option moves out to sit beside the name and the comment takes the bracket.
  * An option that merely repeats the modifier's name is dropped.
  */
-export function modifierText(modifier: Ability): ModifierText {
+export function modifierText(modifier: Ability, optionPrefix = ''): ModifierText {
   const value = modifierValue(modifier);
   const signed = formatSigned(value);
   const rawOption = modifier.attributes['OPTION_ALIAS'] ?? '';
-  const option = rawOption === modifier.alias ? '' : rawOption;
+  const option = rawOption === modifier.alias ? '' : `${optionPrefix}${rawOption}`;
   const comments = modifier.attributes['COMMENTS'] ?? '';
 
   if (comments.length > 0) {

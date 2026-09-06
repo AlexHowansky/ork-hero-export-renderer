@@ -4,23 +4,17 @@ Renders HERO System character sheets by applying a HERO Designer export template
 (`*.hde`) to a character file (`*.hdc`), producing the same HTML that HERO
 Designer's own export function produces — without needing HERO Designer.
 
-**Status: in progress.** Phases 1–5 are complete, and the library now renders a
-character sheet end to end. What remains is the whole-document replacement pass
-and the command-line tool. See `PLAN.md`.
+**Status: the renderer works.** Phases 1–6 are complete. Applying
+`fixtures/Ork-16x9.hde` to `fixtures/Redshift.hdc` reproduces
+`fixtures/Redshift.HTML` — the sheet HERO Designer exported from those same two
+files — **byte for byte, all 2,728,374 of them**, with strict mode on. The
+command-line tool is what remains. See `PLAN.md`.
 
-Rendering the reference character reproduces the sheet HERO Designer exported
-from it on **1,823 of 1,831 lines**, once the template's own fraction
-replacements are applied — those are phase 6 and account for 11 further lines.
-
-The eight remaining lines all trace to one missing piece of the rules: the area
-a power covers.
-
-* Change Environment's `4" radius`, and the points its `-3 DCV` adder is worth.
-* The `4"` in Energy Blast's `Area Of Effect (4" Radius; +1)`.
-
-Because the first of those changes a multipower slot's price, it also moves the
-totals: powers come to 121 rather than 124, so experience spent reads 13 rather
-than 16.
+That said, one character is one character. Three rules were inferred from this
+fixture alone and are the most likely places another character will disagree:
+how an area power's radius scales, how an adder priced only in the rules data is
+costed, and the two-space separator before a subject (`Hunted:  Overwatch`),
+which Knowledge Skills alone do not use. Each is commented where it lives.
 
 ## Game rules data
 
@@ -136,8 +130,20 @@ const html = renderTemplate(template, createContext(sheet, {
 }));
 ```
 
-`<!--MATH-->` expressions are parsed rather than evaluated, so a template can
-never execute anything.
+The template's own replacement rules run last, over the finished document:
+
+```ts
+import { applyReplacements } from 'ork-hero-export-renderer';
+const finished = applyReplacements(html, template.replacements);
+```
+
+This is what turns `1/2` into `½`, and it is why the rules engine leaves
+fractions in their ASCII form until the very end.
+
+Both of these treat the template as input rather than as code. `<!--MATH-->`
+expressions are parsed, never evaluated, so a template cannot execute anything;
+and replacement patterns are length-capped and refused if they use a Java-only
+construct or repeat a group that already repeats.
 
 ## Development
 
