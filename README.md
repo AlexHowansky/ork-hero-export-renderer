@@ -4,9 +4,20 @@ Renders HERO System character sheets by applying a HERO Designer export template
 (`*.hde`) to a character file (`*.hdc`), producing the same HTML that HERO
 Designer's own export function produces — without needing HERO Designer.
 
-**Status: in progress.** Phases 1–3 are complete: the game-rules layer, reading
-character files, and the template engine. The rules calculations, the tag
+**Status: in progress.** Phases 1–4 are complete: the game-rules layer, reading
+character files, the template engine, and the rules calculations. The tag
 vocabulary and the rendering CLI are still to come. See `PLAN.md`.
+
+Against the reference character, the rules engine reproduces the exported sheet
+exactly for all 17 characteristics, all 29 skills, both talents, all 13
+disadvantages, all 3 martial maneuvers, and 7 of 9 powers. Two known gaps
+remain, both the same missing piece — the area a power covers:
+
+* Change Environment's `4" radius` and the points its `-3 DCV` adder is worth.
+* The `4"` in Energy Blast's `Area Of Effect (4" Radius; +1)`.
+
+That single gap is the whole of the points discrepancy: powers total 121 rather
+than 124, so experience spent reads 13 rather than 16.
 
 ## Game rules data
 
@@ -84,6 +95,23 @@ depends on each:
   generated (`STR_VAL`, `RUNNING_PRIMARY`), so no list could be complete.
 * **A false conditional collapses in place**, leaving the whitespace around it,
   which is why exported sheets contain `class="text-start  "` with two spaces.
+
+## Rules calculations
+
+Two conventions run through the engine and explain most of its surprises.
+
+**Totals sum exact costs; only the display rounds.** Redshift's characteristic
+costs show as 2, 2 and 16 but contribute 1.5, 1.5 and 16.4, which is why the
+sheet totals 168 and not the 169 you get by adding the printed column.
+
+**Fractions stay as `1/2` and `1/4`.** Templates convert them to `½` and `¼`
+with their own replacement rules at the end of a render, so producing the
+typographic forms early would stop those rules matching.
+
+Figured characteristics are derived from the rules data rather than a
+hard-coded table — `Main.hdt` gives STR `PDINCREASE="1" PDINCREASELEVELS="5"`,
+so 5 points of STR add 1 to PD's base — which means the sixth-edition tables
+fall out of the same code.
 
 ## Development
 

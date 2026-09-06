@@ -51,6 +51,13 @@ export {
   type TextNode,
 } from './template/ast.ts';
 
+export * from './model/numbers.ts';
+export * from './model/characteristics.ts';
+export * from './model/modifiers.ts';
+export * from './model/abilities.ts';
+export * from './model/powers.ts';
+export * from './model/points.ts';
+
 export { RulesLibrary, defaultRulesDirectory } from './rules/load.ts';
 export { resolveSystem, indexSection } from './rules/merge.ts';
 export {
