@@ -199,6 +199,20 @@ plain-language message on failure. Package with dual ESM/CJS output, `exports` m
 * **Manual check:** open the generated HTML in a browser and confirm the tabs, the
   Chart.js panel, and the embedded image render as they do in the fixture.
 
+## Status
+
+All seven phases are implemented. The acceptance gate passes: rendering
+`Redshift.hdc` with `Ork-16x9.hde` reproduces `Redshift.HTML` byte for byte in
+strict mode, verified through both the library and the CLI.
+
+Four rules were inferred from this one character and are the likeliest places a
+second character will disagree. Each is commented where it lives:
+
+* how an area power's radius scales, and how an Area Of Effect advantage's does;
+* how an adder priced only in the rules data is costed (`LEVELSTART`);
+* the two-space separator before a subject, which Knowledge Skills alone do not use;
+* the reading of `ADDERSEPARATOR` on a disadvantage.
+
 ## Open items to settle during implementation
 
 * Package name and whether the two CLIs ship as one `bin` with subcommands or two.

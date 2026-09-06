@@ -1,4 +1,5 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import { isEntryPoint } from '../util/entrypoint.ts';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { HeroError } from '../util/errors.ts';
@@ -84,6 +85,7 @@ export async function extractRules(options: Options, logger: Logger): Promise<vo
   const manifest: RulesManifest = {
     formatVersion: RULES_FORMAT_VERSION,
     sourceJar: basename(options.jarPath),
+    appVersion: formatBuildDate(archive.newestEntryDate),
     extractedAt: new Date().toISOString(),
     templates: entries,
   };
@@ -98,6 +100,15 @@ async function readJar(path: string): Promise<Buffer> {
   } catch (cause) {
     throw new HeroError(`Could not read the file "${path}". Please check the path and try again.`, { cause });
   }
+}
+
+/** HERO Designer names its builds by date, as in "20260405". */
+function formatBuildDate(date: Date | undefined): string {
+  if (date === undefined) {
+    return '';
+  }
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
 }
 
 function countEntries(template: RuleTemplate): number {
@@ -177,6 +188,6 @@ function messageFor(error: unknown): string {
   return error instanceof HeroError || error instanceof Error ? error.message : String(error);
 }
 
-if (import.meta.main) {
+if (isEntryPoint(import.meta.url)) {
   await main();
 }

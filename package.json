@@ -7,25 +7,41 @@
   "engines": {
     "node": ">=20"
   },
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "bin": {
-    "extract-rules": "./src/cli/extract-rules.ts"
+    "render": "./dist/cli/render.js",
+    "extract-rules": "./dist/cli/extract-rules.js"
   },
   "files": [
-    "src",
-    "rules"
+    "dist",
+    "rules",
+    "README.md"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli/render.js dist/cli/extract-rules.js",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "extract-rules": "bun run src/cli/extract-rules.ts"
+    "extract-rules": "bun run src/cli/extract-rules.ts",
+    "render": "bun run src/cli/render.ts",
+    "prepublishOnly": "bun run build && bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.6.0"
-  }
+  },
+  "keywords": [
+    "hero-system",
+    "hero-designer",
+    "character-sheet",
+    "hdc",
+    "hde",
+    "rpg"
+  ]
 }

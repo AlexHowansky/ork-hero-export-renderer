@@ -28,6 +28,8 @@ export interface ZipEntry {
   readonly compressedSize: number;
   readonly uncompressedSize: number;
   readonly localHeaderOffset: number;
+  /** The entry's stored modification date, as a local-time Date. */
+  readonly modified: Date;
 }
 
 export class ZipArchive {
@@ -44,6 +46,21 @@ export class ZipArchive {
 
   get names(): string[] {
     return [...this.entries.keys()];
+  }
+
+  entry(name: string): ZipEntry | undefined {
+    return this.entries.get(name);
+  }
+
+  /** The newest entry's date, which for a program jar is its build date. */
+  get newestEntryDate(): Date | undefined {
+    let newest: Date | undefined;
+    for (const entry of this.entries.values()) {
+      if (newest === undefined || entry.modified > newest) {
+        newest = entry.modified;
+      }
+    }
+    return newest;
   }
 
   has(name: string): boolean {
@@ -142,10 +159,23 @@ function readCentralDirectory(data: Buffer, source: string): Map<string, ZipEntr
       compressedSize: data.readUInt32LE(cursor + 20),
       uncompressedSize: data.readUInt32LE(cursor + 24),
       localHeaderOffset: data.readUInt32LE(cursor + 42),
+      modified: fromDosDateTime(data.readUInt16LE(cursor + 14), data.readUInt16LE(cursor + 12)),
     });
     cursor += 46 + nameLength + extraLength + commentLength;
   }
   return entries;
+}
+
+/** Zip stores dates in the packed MS-DOS form: 7-bit year from 1980, then month and day. */
+function fromDosDateTime(date: number, time: number): Date {
+  return new Date(
+    1980 + ((date >> 9) & 0x7f),
+    (((date >> 5) & 0x0f) || 1) - 1,
+    (date & 0x1f) || 1,
+    (time >> 11) & 0x1f,
+    (time >> 5) & 0x3f,
+    (time & 0x1f) * 2,
+  );
 }
 
 function findEndOfCentralDirectory(data: Buffer, source: string): number {

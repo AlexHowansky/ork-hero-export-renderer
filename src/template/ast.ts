@@ -67,3 +67,19 @@ export interface ParsedTemplate {
 export function isTextNode(node: TemplateNode): node is TextNode {
   return node.kind === 'text';
 }
+
+/**
+ * Whether a parsed template contains any directive at all.
+ *
+ * A file with none is not an export template — most often it is a character
+ * file passed where the template was meant to go, which would otherwise render
+ * without complaint as a page of nonsense.
+ */
+export function hasDirectives(template: ParsedTemplate): boolean {
+  if (template.name.length > 0 || template.fileExtensions.length > 0) {
+    return true;
+  }
+  // A nested directive implies a container holding it at the top level, so
+  // there is no need to look deeper than this.
+  return template.body.some((node) => node.kind !== 'text');
+}

@@ -5,9 +5,18 @@
  * (`*.hdc`) to produce an HTML character sheet, reproducing what HERO Designer
  * itself does when you export a character.
  *
- * Rendering arrives in a later phase. What is exported today is the game-rules
- * layer and the character-file reader that rendering will be built on.
+ * The quickest way in is `renderFiles`, which takes the two paths and gives
+ * back the finished HTML. Everything it uses is exported too, so a caller can
+ * take the pipeline apart — read a character, inspect the computed sheet, swap
+ * the rules data — without reimplementing any of it.
  */
+
+export {
+  render,
+  renderFiles,
+  renderToFile,
+  type RenderOptions,
+} from './render.ts';
 
 export { HeroError, InvalidFileError, RulesError } from './util/errors.ts';
 export { consoleLogger, silentLogger, type Logger, type LogLevel } from './util/logger.ts';

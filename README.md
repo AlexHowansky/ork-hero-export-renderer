@@ -4,17 +4,40 @@ Renders HERO System character sheets by applying a HERO Designer export template
 (`*.hde`) to a character file (`*.hdc`), producing the same HTML that HERO
 Designer's own export function produces — without needing HERO Designer.
 
-**Status: the renderer works.** Phases 1–6 are complete. Applying
-`fixtures/Ork-16x9.hde` to `fixtures/Redshift.hdc` reproduces
-`fixtures/Redshift.HTML` — the sheet HERO Designer exported from those same two
-files — **byte for byte, all 2,728,374 of them**, with strict mode on. The
-command-line tool is what remains. See `PLAN.md`.
+**Status: complete.** Applying `fixtures/Ork-16x9.hde` to
+`fixtures/Redshift.hdc` reproduces `fixtures/Redshift.HTML` — the sheet HERO
+Designer exported from those same two files — **byte for byte, all 2,728,374 of
+them**, with strict mode on, through the command line and through the library
+alike.
 
 That said, one character is one character. Three rules were inferred from this
 fixture alone and are the most likely places another character will disagree:
 how an area power's radius scales, how an adder priced only in the rules data is
 costed, and the two-space separator before a subject (`Hunted:  Overwatch`),
 which Knowledge Skills alone do not use. Each is commented where it lives.
+
+## Rendering a sheet
+
+```sh
+render Redshift.hdc Ork-16x9.hde sheet.html   # write a file
+render Redshift.hdc Ork-16x9.hde              # or print it
+```
+
+Progress goes to standard error, so piping the sheet somewhere stays clean.
+`--no-strict` leaves anything the renderer cannot work out blank and carries on,
+rather than stopping with an explanation. Directives it does not recognise are
+copied through untouched in either mode, which is what HERO Designer does.
+
+```ts
+import { renderFiles } from 'ork-hero-export-renderer';
+
+const html = await renderFiles('Redshift.hdc', 'Ork-16x9.hde');
+```
+
+The sheet's `CHARACTER_SAVE_TIMESTAMP` is the character file's own modification
+time written in **local** time, as HERO Designer writes it, so reproducing a
+particular exported sheet means running in the zone it was exported from. Pass
+`saveTimestamp` to pin it.
 
 ## Game rules data
 
@@ -26,7 +49,7 @@ as `*.hdt` files inside its program jar.
 Compile them into the JSON this project reads:
 
 ```sh
-bun run src/cli/extract-rules.ts /path/to/HD6.jar
+extract-rules /path/to/HD6.jar
 ```
 
 This writes `rules/manifest.json` plus one file per game system. Re-run it after
@@ -110,7 +133,11 @@ hard-coded table — `Main.hdt` gives STR `PDINCREASE="1" PDINCREASELEVELS="5"`,
 so 5 points of STR add 1 to PD's base — which means the sixth-edition tables
 fall out of the same code.
 
-## Rendering a sheet
+## Taking the pipeline apart
+
+`renderFiles` is the four steps below in one call. Every piece is exported, so a
+caller can stop partway — to inspect the computed sheet, or to supply different
+rules data — without reimplementing any of it.
 
 ```ts
 import {
@@ -149,6 +176,10 @@ construct or repeat a group that already repeats.
 
 ```sh
 bun install
-bun test
+bun test           # 178 tests, including the byte-for-byte comparison
 bun run typecheck
+bun run build      # emit dist/ for Node
 ```
+
+The package targets Bun and runs equally on Node 20 or later. `bun run build`
+emits ESM with type declarations; CommonJS is not produced.

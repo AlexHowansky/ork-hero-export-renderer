@@ -107,7 +107,8 @@ class XmlParser {
         // Refusing this is the whole XXE defence; do not soften it.
         throw this.fail(
           'This file contains a document type or entity declaration, which is not allowed. ' +
-            'HERO Designer never produces these, so the file may be corrupt or may have been tampered with.',
+            'HERO Designer never writes one, so this is probably not the kind of file it was ' +
+            'given as — an HTML page rather than a character file, say — or it has been tampered with.',
         );
       } else if (this.startsWith('</')) {
         this.readCloseTag(stack);

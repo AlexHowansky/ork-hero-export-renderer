@@ -81,6 +81,11 @@ export interface RulesManifest {
   readonly formatVersion: number;
   /** Where the data came from, so a stale bundle is identifiable. */
   readonly sourceJar: string;
+  /**
+   * The HERO Designer build the data came from, as `YYYYMMDD` — the version
+   * string an exported sheet carries. Taken from the jar's newest entry.
+   */
+  readonly appVersion: string;
   readonly extractedAt: string;
   readonly templates: readonly ManifestEntry[];
 }
