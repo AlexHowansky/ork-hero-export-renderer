@@ -1,0 +1,40 @@
+/**
+ * HERO Export Renderer.
+ *
+ * Applies a HERO Designer export template (`*.hde`) to a character file
+ * (`*.hdc`) to produce an HTML character sheet, reproducing what HERO Designer
+ * itself does when you export a character.
+ *
+ * Rendering arrives in a later phase; what is exported today is the game-rules
+ * layer that rendering will be built on.
+ */
+
+export { HeroError, InvalidFileError, RulesError } from './util/errors.ts';
+export { consoleLogger, silentLogger, type Logger, type LogLevel } from './util/logger.ts';
+
+export { parseXml, childNamed, childrenNamed, type XmlElement, type ParseXmlOptions } from './xml/parse.ts';
+
+export { RulesLibrary, defaultRulesDirectory } from './rules/load.ts';
+export { resolveSystem, indexSection } from './rules/merge.ts';
+export {
+  compileTemplate,
+  editionForTemplateId,
+  ruleNodeId,
+  templateIdFromFileName,
+  templateIdFromReference,
+  type CompileOptions,
+} from './rules/hdt.ts';
+export { ZipArchive, type ZipEntry } from './rules/jar.ts';
+export {
+  RULES_FORMAT_VERSION,
+  SECTION_NAMES,
+  isSectionName,
+  type Edition,
+  type ManifestEntry,
+  type RuleNode,
+  type RuleSection,
+  type RuleSystem,
+  type RuleTemplate,
+  type RulesManifest,
+  type SectionName,
+} from './rules/types.ts';
