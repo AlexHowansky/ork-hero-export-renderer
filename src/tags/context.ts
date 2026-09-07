@@ -6,13 +6,16 @@ import { silentLogger, type Logger } from '../util/logger.ts';
 import {
   characteristicDisplayValue,
   characteristicNotes,
+  characteristicSecondaryValue,
   combatValue,
   hasRoll,
+  hasSecondary,
   isCharacteristicName,
 } from '../model/characteristics.ts';
+import { defenceFigures } from '../model/defenses.ts';
 import { formatJavaDouble, formatRoll, roundHalfUp } from '../model/numbers.ts';
 import type { RenderedAbility, RenderedManeuver } from '../model/abilities.ts';
-import type { RenderedPower } from '../model/powers.ts';
+import { totalPowerCost, type RenderedPower } from '../model/powers.ts';
 import type { Sheet } from './sheet.ts';
 import { evaluateMath } from './math.ts';
 
@@ -160,7 +163,7 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
       case 'IFNOTES':
         return when(notesOf(current()).length > 0, render);
       case 'IF_SECONDARY':
-        return when(false, render);
+        return when(secondaryOf(sheet, current()), render);
       case 'IS_LIST':
         return when(isFramework(sheet, current()), render);
       case 'IS_NOT_LIST':
@@ -220,7 +223,7 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
         case 'TOTAL':
           return characteristicDisplayValue(characteristic);
         case 'SECONDARY':
-          return '';
+          return characteristicSecondaryValue(characteristic);
         case 'BASE':
           return String(characteristic.base);
         case 'COST':
@@ -228,14 +231,17 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
         case 'ROLL':
           return hasRoll(id) ? formatRoll(characteristic.total) : '';
         case 'NOTES':
-          return characteristicNotes(characteristic, built.characteristics, built.system, defenceFor(built, id));
+          return characteristicNotes(characteristic, built.characteristics, built.system, {
+            defences: defenceFor(built, id),
+            perception: built.perception,
+          });
         case 'RESISTANT_TOTAL':
-          return String(defenceFor(built, id)?.resistant ?? 0);
+          return defenceFor(built, id)?.resistant ?? '0';
         case 'NONRESISTANT_TOTAL':
           // Despite the name, HERO Designer prints the whole total here and
           // the resistant part separately: Redshift's sheet reads 12 and 12,
           // not 0 and 12.
-          return String(defenceFor(built, id)?.total ?? 0);
+          return defenceFor(built, id)?.value ?? '0';
         default:
           return undefined;
       }
@@ -307,9 +313,7 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
       case 'TALENT_POINTS':
         return String(sum(built.talents));
       case 'POWER_POINTS':
-        return String(
-          roundHalfUp(built.powers.reduce((total, power) => total + Number.parseFloat(power.cost), 0)),
-        );
+        return String(totalPowerCost(built.powers));
 
       case 'OCV':
       case 'PRIMARY_OCV':
@@ -386,7 +390,11 @@ function scopedTag(scope: Scope, name: string): string | undefined {
     case 'TALENT_COST':
     case 'DISAD_COST':
     case 'COMBAT_LEVEL_COST':
-      return rendered === undefined ? undefined : String(rendered.cost);
+      if (rendered === undefined) {
+        return undefined;
+      }
+      // A list heading is only a name; its cost column stays empty.
+      return rendered.isList ? '' : String(rendered.cost);
     case 'SKILL_NOTES':
     case 'PERK_NOTES':
     case 'TALENT_NOTES':
@@ -438,11 +446,19 @@ function isSlot(sheet: Sheet, scope: Scope): boolean {
   return id !== undefined && sheet.slotIds.has(id);
 }
 
-function defenceFor(sheet: Sheet, id: string): { total: number; resistant: number } | undefined {
+function defenceFor(sheet: Sheet, id: string): { value: string; resistant: string } | undefined {
+  const { defences } = sheet;
   if (id === 'PD') {
-    return sheet.defences.physical;
+    return defenceFigures(defences.physical, defences.primaryPhysical);
   }
-  return id === 'ED' ? sheet.defences.energy : undefined;
+  return id === 'ED' ? defenceFigures(defences.energy, defences.primaryEnergy) : undefined;
+}
+
+/** Whether the characteristic a container is on has a conditional half to show. */
+function secondaryOf(sheet: Sheet, scope: Scope): boolean {
+  const id = scope.characteristicId;
+  const characteristic = id === undefined ? undefined : sheet.characteristics.byId.get(id);
+  return characteristic !== undefined && hasSecondary(characteristic);
 }
 
 function when(condition: boolean, render: () => string): string {

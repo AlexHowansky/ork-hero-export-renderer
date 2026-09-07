@@ -40,10 +40,11 @@ let characteristics: CharacteristicSet;
 beforeAll(async () => {
   system = (await RulesLibrary.load()).system('Superheroic');
   character = parseCharacterFile(readFileSync('fixtures/Redshift.hdc'), 'Redshift.hdc');
-  // Combat Luck grants 6 resistant PD and ED.
+  // Combat Luck grants 6 resistant PD and ED, and is always on.
+  const always = { affectsPrimary: true, affectsTotal: true };
   characteristics = buildCharacteristics(character.characteristics, system, [
-    { id: 'PD', amount: 6 },
-    { id: 'ED', amount: 6 },
+    { id: 'PD', amount: 6, ...always },
+    { id: 'ED', amount: 6, ...always },
   ]);
 });
 
@@ -102,19 +103,17 @@ describe('characteristics', () => {
   };
 
   test('reproduces every row of the sheet', () => {
-    const defences = { PD: { total: 12, resistant: 12 }, ED: { total: 12, resistant: 12 } };
+    // Both figures as the sheet writes them; nothing here is conditional.
+    const defences = { PD: { value: '12', resistant: '12' }, ED: { value: '12', resistant: '12' } };
     for (const characteristic of characteristics.all) {
       const [value, base, cost, notes] = expected[characteristic.id]!;
       expect({
         value: characteristicDisplayValue(characteristic),
         base: String(characteristic.base),
         cost: characteristic.cost,
-        notes: characteristicNotes(
-          characteristic,
-          characteristics,
-          system,
-          defences[characteristic.id as 'PD' | 'ED'],
-        ),
+        notes: characteristicNotes(characteristic, characteristics, system, {
+          defences: defences[characteristic.id as 'PD' | 'ED'],
+        }),
       }).toEqual({ value, base, cost, notes });
     }
   });
@@ -176,7 +175,7 @@ describe('skills', () => {
 
 describe('talents', () => {
   test('prices talents from the rules, per level', () => {
-    const built = character.talents.map((t) => buildSimple(t, ruleFor(system, 'TALENTS', t.xmlId)));
+    const built = character.talents.map((t) => buildSimple(t, system, ruleFor(system, 'TALENTS', t.xmlId)));
     expect(built.map((t) => [t.text, t.cost])).toEqual([
       ['Combat Luck (6 PD/6 ED)', 12],
       ['Lightning Reflexes: +4 DEX to act first with All Actions', 6],
@@ -333,7 +332,7 @@ describe('points', () => {
   test('adds up the sections of the fixture character', () => {
     const skills = totalCost(character.skills.map((s) => buildSkill(s, system, characteristics)));
     const talents = totalCost(
-      character.talents.map((t) => buildSimple(t, ruleFor(system, 'TALENTS', t.xmlId))),
+      character.talents.map((t) => buildSimple(t, system, ruleFor(system, 'TALENTS', t.xmlId))),
     );
     const martialArts = roundHalfUp(
       character.martialArts.map(buildManeuver).reduce((sum, m) => sum + m.cost, 0),

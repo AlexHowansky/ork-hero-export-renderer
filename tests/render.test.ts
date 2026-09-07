@@ -17,13 +17,15 @@ const APP_VERSION = '20260405';
 
 /**
  * The characters the renderer is held to, each with the moment its reference
- * sheet was exported. Redshift is a fifth-edition multipower character;
- * The Bismarck is a fifth-edition Elemental Control one, and between them they
- * cover most of what a sheet can say.
+ * sheet was exported. Redshift is a fifth-edition multipower character; The
+ * Bismarck is a fifth-edition Elemental Control one; and Azarra groups her
+ * powers into lists and keeps most of them in a suit she can be parted from.
+ * Between them they cover most of what a sheet can say.
  */
 const CHARACTERS = [
   { name: 'Redshift', savedAt: SAVED_AT },
   { name: 'The Bismarck', savedAt: new Date(2026, 8, 6, 18, 1, 6) },
+  { name: 'Azarra', savedAt: new Date(2026, 8, 6, 19, 34, 26) },
 ] as const;
 
 interface Rendering {
@@ -234,6 +236,156 @@ describe('The Bismarck, an Elemental Control character', () => {
     expect(skills).toContain(level);
     // A skill that rolls brackets its subject; a familiarity does not.
     expect(skills.map((skill) => skill.text)).toContain('Navigation (Land)');
+  });
+});
+
+describe('Azarra, whose powers live in a suit', () => {
+  const azarra = () => of('Azarra');
+
+  test('fills in the document header', () => {
+    expect(azarra().rendered).toContain('<title>Azarra</title>');
+    expect(azarra().rendered).toContain('content="Azarra.hdc"');
+    expect(azarra().rendered).toContain('content="Sun, 6 Sep 2026 19:34:26"');
+  });
+
+  // A list is a heading the player groups entries under. It is not an ability:
+  // it costs nothing, uses no endurance, and prints nothing but its name.
+  test('heads its powers and disadvantages with lists', () => {
+    const { sheet: built, rendered } = azarra();
+    const list = built.powers.find((power) => power.source.element === 'LIST');
+    expect([list?.text, list?.cost, list?.end]).toEqual(['FSH Combat Suit', '', '']);
+    expect(rendered).toContain('<td class="text-start list ">\n\nFSH Combat Suit');
+    // The same markup marks a list among the disadvantages.
+    expect(built.disadvantages.filter((disad) => disad.isList).map((disad) => disad.text))
+      .toEqual(['Distinctive Features', 'Hunted', 'Psych Limits']);
+    expect(rendered).toContain('<td class="list ">\nDistinctive Features');
+    expect(rendered).toContain('<td class=" list-item">\nDistinctive Features:  Kayzon');
+  });
+
+  // Armor bought in a suit raises what the character has but not what she has
+  // without it, and both figures reach the sheet.
+  test('prints defence she can be parted from as a second figure', () => {
+    const { sheet: built, rendered } = azarra();
+    expect(built.defences.physical).toEqual({ total: 16, resistant: 10 });
+    expect(built.defences.primaryPhysical).toEqual({ total: 6, resistant: 0 });
+    expect(built.characteristics.byId.get('PD')?.primary).toBe(6);
+    expect(built.characteristics.byId.get('PD')?.total).toBe(16);
+    expect(rendered).toContain('<span class="primary">6</span>\n/ <span class="secondary">16</span>');
+    expect(rendered).toContain('6/16 PD (0/10 rPD)');
+  });
+
+  // A talent marked as affecting neither figure contributes to neither, which
+  // is why Combat Luck's 3 resistant points appear nowhere above.
+  test('counts nothing from a talent switched off on both counts', () => {
+    const luck = azarra().sheet.talents.find((talent) => talent.source.xmlId === 'COMBAT_LUCK');
+    expect(luck?.source.attributes['AFFECTS_TOTAL']).toBe('No');
+    expect(azarra().sheet.characteristics.byId.get('PD')?.total).toBe(16);
+  });
+
+  // Skills and talents take advantages and limitations exactly as powers do.
+  test('prices a skill and a talent bought with limitations', () => {
+    const { skills, talents } = azarra().sheet;
+    const level = skills.find((skill) => skill.source.xmlId === 'COMBAT_LEVELS');
+    expect([level?.text, level?.cost]).toEqual([
+      '+4 with DCV (20 Active Points); OIF (suit; -1/2)',
+      13,
+    ]);
+    const luck = talents.find((talent) => talent.source.xmlId === 'COMBAT_LUCK');
+    // The modifier's own name ends in a space, so its value follows two of them.
+    expect([luck?.text, luck?.cost]).toEqual([
+      'Combat Luck (3 PD/3 ED) (6 Active Points); Requires A DEX Roll  (-1/2)',
+      4,
+    ]);
+    const penalty = skills.find((skill) => skill.source.xmlId === 'PENALTY_SKILL_LEVELS');
+    expect([penalty?.text, penalty?.cost]).toEqual([
+      'Penalty Skill Levels:  +4 vs. Range Modifier with a tight group of attacks (grapnel)',
+      8,
+    ]);
+  });
+
+  // A movement power that raises its characteristic says what the total becomes
+  // and lifts the distance and endurance printed against it.
+  test('adds bought movement to the characteristic it is named after', () => {
+    const { sheet: built, rendered } = azarra();
+    const running = built.powers.find((power) => power.source.element === 'RUNNING');
+    expect(running?.text.startsWith('Running +6" (12" total)')).toBe(true);
+    expect(built.characteristics.byId.get('RUNNING')?.total).toBe(12);
+    expect(rendered).toContain('END [2]');
+    // Stretching raises no characteristic, so it just says how far it reaches.
+    const stretching = built.powers.find((power) => power.source.xmlId === 'STRETCHING');
+    expect(stretching?.text.startsWith('Stretching 16"')).toBe(true);
+  });
+
+  test('describes the powers this character brought that the others did not', () => {
+    const text = (xmlId: string) =>
+      azarra().sheet.powers.find((power) => power.source.xmlId === xmlId)?.text;
+    // A sense modifier names the sense it sharpens rather than bracketing it,
+    // and Enhanced Perception says how many levels it bought.
+    expect(text('ENHANCEDPERCEPTION')).toBe('+5 PER with Normal Hearing');
+    expect(text('DISCRIMINATORY')).toBe('Discriminatory with Normal Smell');
+    // Clinging holds on with the character's own STR plus what was bought.
+    expect(text('CLINGING')?.startsWith('Clinging (25 STR)')).toBe(true);
+    // A characteristic bought as a power says how much it adds.
+    expect(text('STR')?.startsWith('+23 STR')).toBe(true);
+    // An Entangle is as hard to break out of as it is strong.
+    expect(text('ENTANGLE')?.startsWith('Entangle 8d6, 8 DEF')).toBe(true);
+    // Life Support separates the environments it covers with semicolons.
+    expect(text('LIFESUPPORT')).toContain('(Safe in High Pressure; Safe in High Radiation;');
+  });
+
+  // The store and its recovery are bought and limited separately, so each half
+  // prints its own modifiers and the sheet charges for both.
+  test('prices an Endurance Reserve and its recovery apart', () => {
+    const reserve = azarra().sheet.powers.find((power) => power.source.xmlId === 'ENDURANCERESERVE');
+    expect(reserve?.text).toBe(
+      'Endurance Reserve  (100 END, 10 REC) Reserve:  (20 Active Points); ' +
+        'IIF (suit, detectable by localized electrical activity; -1/4); REC:  (10 Active Points); ' +
+        'Limited Recovery (standard electrical socket; -2)',
+    );
+    expect([reserve?.cost, reserve?.end]).toEqual(['11', '0']);
+  });
+
+  // A skill can be bought as a power. It reads as a skill, roll and all, and is
+  // priced as a power: its skill cost is what the limitations then divide.
+  test('renders a skill bought as a power', () => {
+    const mimicry = azarra().sheet.powers.find((power) => power.source.xmlId === 'MIMICRY');
+    expect(mimicry?.text).toBe(
+      'Mimicry 17- (11 Active Points); Costs Endurance (-1/2), Only In Heroic Identity (-1/4)',
+    );
+    expect([mimicry?.cost, mimicry?.end]).toEqual(['6', '1']);
+  });
+
+  // Charges that go on working once spent say for how long, and are marked in
+  // the endurance column.
+  test('marks continuing charges in the endurance column', () => {
+    const smoke = azarra().sheet.powers.find((power) => power.source.name === 'smoke grenade');
+    expect(smoke?.end).toBe('[4 cc]');
+    expect(smoke?.text).toContain('4 Continuing Charges lasting 1 Minute each (-1/4)');
+  });
+
+  // Enhanced Perception worn in a suit sharpens the roll only while it is on.
+  test('prints both perception rolls', () => {
+    expect(azarra().rendered).toContain('PER Roll 13-/18-');
+  });
+
+  // Inside the bracket the dearest option comes first, whichever way round the
+  // character file stores them; what comes before it stays as written.
+  test('orders a disadvantage’s options by what they cost', () => {
+    const hunted = azarra().sheet.disadvantages.filter((disad) => disad.source.xmlId === 'HUNTED');
+    expect(hunted.map((disad) => disad.text)).toEqual([
+      'Hunted:  FSH wants their suit back 8- (Mo Pow; NCI; Capture)',
+      'Hunted:  Kay local law enforcement 8- (Mo Pow; Capture)',
+    ]);
+    // A disadvantage with no subject introduces its first option as one.
+    const money = azarra().sheet.disadvantages.find((disad) => disad.source.xmlId === 'MONEYDISAD');
+    expect(money?.text).toBe('Money:  Poor');
+  });
+
+  test('adds up to the totals on the sheet', () => {
+    const { points } = azarra().sheet;
+    expect(points.totalPoints).toBe(400);
+    expect(points.experienceSpent).toBe(0);
+    expect(points.experienceUnspent).toBe(15);
   });
 });
 

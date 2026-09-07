@@ -7,6 +7,7 @@ import {
   buildSimple,
   buildSkill,
   ruleFor,
+  skillRoll,
   totalCost,
   type RenderedAbility,
   type RenderedManeuver,
@@ -15,7 +16,7 @@ import { buildCharacteristics, characteristicNotes, type CharacteristicSet } fro
 import { characteristicBonuses, collectDefences, type Defences } from '../model/defenses.ts';
 import { buildPower, totalPowerCost, type RenderedPower } from '../model/powers.ts';
 import { summarisePoints, type PointsSummary } from '../model/points.ts';
-import { roundHalfUp } from '../model/numbers.ts';
+import { formatInches, roundHalfUp } from '../model/numbers.ts';
 
 /**
  * Everything a template can ask about, worked out once before rendering starts.
@@ -39,6 +40,8 @@ export interface Sheet {
   /** Skill levels bought as combat levels, which print in their own table. */
   readonly combatLevels: readonly RenderedAbility[];
   readonly points: PointsSummary;
+  /** What Enhanced Perception adds to the PER roll, always on and in total. */
+  readonly perception: { readonly primary: number; readonly total: number };
   /** Ids of powers that head a framework, and of those that are slots in one. */
   readonly frameworkIds: ReadonlySet<string>;
   readonly slotIds: ReadonlySet<string>;
@@ -78,14 +81,23 @@ export function buildSheet(
   const skills = allSkills;
   const combatLevels = allSkills.filter((skill) => COMBAT_LEVEL_IDS.has(skill.source.xmlId));
 
-  const perks = character.perks.map((perk) => buildSimple(perk, ruleFor(system, 'PERKS', perk.xmlId)));
+  const perks = character.perks.map((perk) =>
+    buildSimple(perk, system, ruleFor(system, 'PERKS', perk.xmlId)),
+  );
   const talents = character.talents.map((talent) =>
-    buildSimple(talent, ruleFor(system, 'TALENTS', talent.xmlId)),
+    buildSimple(talent, system, ruleFor(system, 'TALENTS', talent.xmlId)),
   );
   const disadvantages = character.disadvantages.map((disadvantage) =>
     buildDisadvantage(disadvantage, system, ruleFor(system, 'DISADVANTAGES', disadvantage.xmlId)),
   );
   const { slotsByFrameworkId } = groupByFramework(character.powers);
+  // Lists group entries the same way a framework groups its slots, and can head
+  // any section, so every section is grouped for the list markup.
+  const grouped = [
+    slotsByFrameworkId,
+    ...[character.equipment, character.disadvantages, character.skills, character.perks, character.talents]
+      .map((section) => groupByFramework(section).slotsByFrameworkId),
+  ];
   const frameworksById = new Map<string, Ability>();
   for (const framework of character.powers) {
     if (slotsByFrameworkId.has(framework.id)) {
@@ -101,28 +113,38 @@ export function buildSheet(
     }
     return target.name.trim().length > 0 ? target.name : target.alias;
   };
-  const leaping = characteristics.byId.get('LEAPING');
-  const leapingNotes = leaping === undefined
-    ? ''
-    : characteristicNotes(leaping, characteristics, system, undefined);
+  // Leaping prints its two distances; every other movement prints its total.
+  const movementNote = (id: string): string | undefined => {
+    const characteristic = characteristics.byId.get(id);
+    if (characteristic === undefined) {
+      return undefined;
+    }
+    return id === 'LEAPING'
+      ? characteristicNotes(characteristic, characteristics, system)
+      : `${formatInches(characteristic.total)} total`;
+  };
+  const strength = characteristics.byId.get('STR')?.total ?? 0;
   const build = (power: Ability) =>
     buildPower(power, system, {
       ...options,
       linkTarget,
-      leapingNotes,
+      movementNote,
+      strength,
+      skillRoll: (skill) => skillRoll(skill, ruleFor(system, 'SKILLS', skill.xmlId), characteristics),
       ...(power.parentId !== undefined && frameworksById.has(power.parentId)
         ? { framework: frameworksById.get(power.parentId) as Ability }
         : {}),
     });
   const powers = character.powers.map(build);
   const equipment = character.equipment.map(build);
-  const strength = characteristics.byId.get('STR')?.total ?? 0;
   const maneuvers = character.martialArts.map((maneuver) => buildManeuver(maneuver, strength));
 
-  const frameworkIds = new Set(slotsByFrameworkId.keys());
+  const frameworkIds = new Set(grouped.flatMap((section) => [...section.keys()]));
   const slotIds = new Set(
-    [...slotsByFrameworkId.values()].flat().map((slot: Ability) => slot.id),
+    grouped.flatMap((section) => [...section.values()].flat().map((slot: Ability) => slot.id)),
   );
+
+  const perception = perceptionBonus(character.powers);
 
   const points = summarisePoints({
     basePoints: character.configuration.basePoints,
@@ -151,7 +173,28 @@ export function buildSheet(
     maneuvers,
     combatLevels,
     points,
+    perception,
     frameworkIds,
     slotIds,
   };
+}
+
+/**
+ * What Enhanced Perception adds to the character's PER roll. A power worn in a
+ * suit counts towards the total but not the always-on figure, and the sheet
+ * then prints both.
+ */
+function perceptionBonus(powers: readonly Ability[]): { primary: number; total: number } {
+  let primary = 0;
+  let total = 0;
+  for (const power of powers) {
+    if (power.xmlId !== 'ENHANCEDPERCEPTION' || power.attributes['AFFECTS_TOTAL'] === 'No') {
+      continue;
+    }
+    total += power.levels;
+    if (power.attributes['AFFECTS_PRIMARY'] !== 'No') {
+      primary += power.levels;
+    }
+  }
+  return { primary, total };
 }

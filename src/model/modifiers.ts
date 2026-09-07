@@ -1,6 +1,6 @@
 import type { Ability } from '../hdc/types.ts';
 import type { RuleNode, RuleSystem } from '../rules/types.ts';
-import { formatSigned, roundHalfUp, roundHalfDown } from './numbers.ts';
+import { formatSigned, roundHalfUp, roundHalfDown, roundUp } from './numbers.ts';
 
 /**
  * Adders, advantages and limitations: what they cost and how they read.
@@ -143,6 +143,7 @@ export function adderString(
   adders: readonly Ability[],
   rules?: AdderRules,
   hidden: ReadonlySet<string> = new Set(),
+  separator = ', ',
 ): string {
   const grouped: string[] = [];
   const plain: string[] = [];
@@ -159,7 +160,7 @@ export function adderString(
     (hasOwnAdders || adder.attributes['GROUP'] === 'Yes' ? grouped : plain).push(text);
   }
   const byName = (a: string, b: string) => (a.toUpperCase() < b.toUpperCase() ? -1 : a.toUpperCase() > b.toUpperCase() ? 1 : 0);
-  return [...grouped.sort(byName), ...plain.sort(byName)].join(', ');
+  return [...grouped.sort(byName), ...plain.sort(byName)].join(separator);
 }
 
 // ------------------------------------------------------------- modifiers
@@ -285,11 +286,13 @@ export function realCost(
 const OPTION_REPLACES_NAME = new Set(['FOCUS', 'RANGED', 'UOO']);
 const OPTION_IN_BRACKET = new Set(['REDUCEDEND', 'BOECV', 'COSTSEND', 'EXTRATIME', 'INVISIBLE']);
 const OPTION_HIDDEN = new Set([
-  'ARMORPIERCING', 'DOUBLEKB', 'HARDENED', 'PENETRATING', 'RESTRAINABLE',
-  'SEMIARMORPIERCING', 'SIDEEFFECTS',
+  'ARMORPIERCING', 'DOUBLEKB', 'HARDENED', 'PENETRATING', 'REQUIRESASKILLROLL',
+  'RESTRAINABLE', 'SEMIARMORPIERCING', 'SIDEEFFECTS',
 ]);
 /** Extra Time separates the parts of its bracket with commas, not semicolons. */
 const COMMA_BRACKET = new Set(['EXTRATIME']);
+/** Charges that go on working after they are spent, for a stated time. */
+export const CONTINUING_ADDER = 'CONTINUING';
 
 /**
  * How one modifier reads.
@@ -308,7 +311,9 @@ export function modifierText(modifier: Ability, env: ModifierEnv): ModifierText 
   const comments = modifier.attributes['COMMENTS'] ?? '';
 
   const bracket: string[] = [];
-  let head = modifier.alias.trim();
+  // Only leading space is dropped: a modifier whose name ends in one — "Requires
+  // A DEX Roll " — really does print two spaces before its value.
+  let head = modifier.alias.trimStart();
 
   if (modifier.xmlId === 'UOO') {
     // `Usable Simultaneously (up to 4 people at once; +3/4)`: the option names
@@ -321,8 +326,13 @@ export function modifierText(modifier: Ability, env: ModifierEnv): ModifierText 
   } else if (OPTION_REPLACES_NAME.has(modifier.xmlId)) {
     head = optionAlias.length > 0 ? optionAlias : head;
   } else if (modifier.xmlId === 'CHARGES') {
-    // The number of charges comes before the word: `6 Charges (-3/4)`.
-    head = `${optionAlias} ${head}`.trim();
+    // The number of charges comes before the word: `6 Charges (-3/4)`. Charges
+    // that keep working once spent say for how long, in place of the adder that
+    // records it: `4 Continuing Charges lasting 1 Minute each`.
+    const continuing = modifier.adders.find((adder) => adder.xmlId === CONTINUING_ADDER);
+    head = continuing === undefined
+      ? `${optionAlias} ${head}`.trim()
+      : `${optionAlias} ${continuing.alias} ${head} lasting ${continuing.attributes['OPTION_ALIAS'] ?? ''} each`.trim();
   } else if (modifier.xmlId === 'AOE') {
     bracket.push(areaOfEffect(modifier, optionAlias, env));
   } else if (modifier.xmlId === 'DIFFICULTTODISPEL') {
@@ -344,7 +354,8 @@ export function modifierText(modifier: Ability, env: ModifierEnv): ModifierText 
   }
 
   for (const adder of modifier.adders) {
-    if (!shown(adder)) {
+    // A Continuing adder has already been written into the modifier's name.
+    if (!shown(adder) || (modifier.xmlId === 'CHARGES' && adder.xmlId === CONTINUING_ADDER)) {
       continue;
     }
     const text = adderText(adder, adderRulesFrom(rule)(adder)).trim();
@@ -383,4 +394,39 @@ function areaOfEffect(modifier: Ability, optionAlias: string, env: ModifierEnv):
 /** `(75 Active Points)`, omitted when there is nothing to say. */
 export function activePointsNote(active: number, hasModifiers: boolean): string {
   return hasModifiers ? ` (${roundHalfUp(active)} Active Points)` : '';
+}
+
+/** What a description's modifier tail needs to know about the prices. */
+export interface Costs {
+  /** The item's own price plus its adders, before any modifier. */
+  readonly total: number;
+  readonly active: number;
+  readonly real: number;
+}
+
+/**
+ * The modifier tail: advantages, then the active-point note, then limitations.
+ * The first limitation is introduced with a semicolon and the rest with commas.
+ *
+ * Powers, skills, talents and perks all read this way — a combat skill level
+ * bought in a suit prints `+4 with DCV (20 Active Points); OIF (suit; -1/2)`
+ * exactly as a power would.
+ */
+export function modifierTail(ability: Ability, env: ModifierEnv, costs: Costs): string {
+  const sorted = sortedModifiers(ability.modifiers, env.system);
+  let text = '';
+  for (const modifier of sorted.filter((entry) => modifierValue(entry, env.system) >= 0)) {
+    text += `, ${modifierText(modifier, env).text}`;
+  }
+  if (
+    ability.attributes['SHOW_ACTIVE_COST'] !== 'No' &&
+    (costs.active !== costs.total || costs.real !== costs.total)
+  ) {
+    text += ` (${roundUp(costs.active)} Active Points)`;
+  }
+  let count = 0;
+  for (const modifier of sorted.filter((entry) => modifierValue(entry, env.system) < 0)) {
+    text += `${++count === 1 ? '; ' : ', '}${modifierText(modifier, env).text}`;
+  }
+  return text;
 }

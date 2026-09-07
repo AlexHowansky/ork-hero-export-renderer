@@ -22,7 +22,16 @@ export interface Characteristic {
   readonly base: number;
   /** The characteristic's own value, before powers and talents add to it. */
   readonly value: number;
-  /** Value including everything that adds to this characteristic. */
+  /**
+   * What the character has without switching anything on: the value plus every
+   * bonus that says it affects the primary figure.
+   */
+  readonly primary: number;
+  /**
+   * Value including everything that adds to this characteristic, whether it is
+   * always on or not. A power that only affects the total — Armor in a suit —
+   * shows here and not in `primary`, and the sheet prints the pair as `6/16`.
+   */
   readonly total: number;
   /** Exact cost, which is what totals are summed from. */
   readonly rawCost: number;
@@ -79,6 +88,10 @@ export interface Bonus {
   /** Characteristic id the bonus applies to. */
   readonly id: string;
   readonly amount: number;
+  /** Whether it counts towards the always-on figure the sheet leads with. */
+  readonly affectsPrimary: boolean;
+  /** Whether it counts at all. A power marked off on both adds nothing. */
+  readonly affectsTotal: boolean;
 }
 
 export function buildCharacteristics(
@@ -116,9 +129,9 @@ export function buildCharacteristics(
     // here inflates the sheet's characteristic total from 168 to 169.
     const attributes = rule.attributes ?? {};
     const rawCost = ((value - base) * number(attributes['LVLCOST'], 0)) / number(attributes['LVLVAL'], 1);
-    const bonus = bonuses
-      .filter((entry) => entry.id === id)
-      .reduce((sum, entry) => sum + entry.amount, 0);
+    const own = bonuses.filter((entry) => entry.id === id);
+    const added = (keep: (entry: Bonus) => boolean) =>
+      own.filter(keep).reduce((sum, entry) => sum + entry.amount, 0);
 
     built.set(id, {
       id,
@@ -127,7 +140,8 @@ export function buildCharacteristics(
       rawBase,
       base,
       value,
-      total: value + bonus,
+      primary: value + added((entry) => entry.affectsPrimary),
+      total: value + added((entry) => entry.affectsTotal),
       rawCost,
       cost: roundHalfUp(rawCost),
       levels,
@@ -237,12 +251,20 @@ export function combatValue(
  * The Notes column. These are computed strings, not anything stored in the
  * character file.
  */
+export interface NotesContext {
+  /** The PD or ED figures, for the two characteristics that show them. */
+  readonly defences?: { readonly value: string; readonly resistant: string } | undefined;
+  /** What Enhanced Perception adds to the PER roll, always on and in total. */
+  readonly perception?: { readonly primary: number; readonly total: number } | undefined;
+}
+
 export function characteristicNotes(
   characteristic: Characteristic,
   set: CharacteristicSet,
   system: RuleSystem,
-  defenses: { readonly resistant: number; readonly total: number } | undefined,
+  context: NotesContext = {},
 ): string {
+  const defenses = context.defences;
   const { id, total } = characteristic;
   switch (id) {
     case 'STR':
@@ -254,8 +276,15 @@ export function characteristicNotes(
         ? ''
         : `OCV ${roundHalfUp(ocv)} DCV ${roundHalfUp(dcv)}`;
     }
-    case 'INT':
-      return `PER Roll ${formatRoll(total)}`;
+    case 'INT': {
+      // Enhanced Perception sharpens the roll, and if it is not always on the
+      // sheet shows both figures: `PER Roll 13-/18-`.
+      const { primary = 0, total: sharpened = 0 } = context.perception ?? {};
+      const roll = formatRoll(total + primary * 5);
+      return sharpened === primary
+        ? `PER Roll ${roll}`
+        : `PER Roll ${roll}/${formatRoll(total + sharpened * 5)}`;
+    }
     case 'EGO': {
       const ecv = combatValue(set, system, 'ECV');
       return ecv === undefined ? '' : `ECV: ${roundHalfUp(ecv)}`;
@@ -266,7 +295,7 @@ export function characteristicNotes(
     case 'ED':
       return defenses === undefined
         ? ''
-        : `${defenses.total} ${id} (${defenses.resistant} r${id})`;
+        : `${defenses.value} ${id} (${defenses.resistant} r${id})`;
     case 'SPD':
       // Two spaces after the colon, as everywhere else on the sheet.
       return `Phases:  ${phases(total).join(', ')}`;
@@ -310,7 +339,19 @@ export function characteristicDisplayValue(characteristic: Characteristic): stri
     const { forward, upward } = characteristic.movement ?? { forward: 0, upward: 0 };
     return `${formatInches(floorToHalf(forward))}/${formatInches(floorToHalf(upward))}`;
   }
-  return formatFraction(characteristic.total);
+  return formatFraction(characteristic.primary);
+}
+
+/**
+ * The `/ 16` half of a `6/16` characteristic, empty when nothing conditional
+ * adds to it.
+ */
+export function characteristicSecondaryValue(characteristic: Characteristic): string {
+  return hasSecondary(characteristic) ? formatFraction(characteristic.total) : '';
+}
+
+export function hasSecondary(characteristic: Characteristic): boolean {
+  return characteristic.id !== 'LEAPING' && characteristic.total !== characteristic.primary;
 }
 
 function floorToHalf(value: number): number {

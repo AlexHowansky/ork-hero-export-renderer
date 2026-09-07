@@ -2,7 +2,17 @@ import type { Ability } from '../hdc/types.ts';
 import { isYes } from '../hdc/parse.ts';
 import type { RuleNode, RuleSystem, SectionName } from '../rules/types.ts';
 import { formatDice, formatRoll, roundHalfUp } from './numbers.ts';
-import { adderRulesFrom, adderString, adderText, adderTotal, advantageTotal } from './modifiers.ts';
+import {
+  activeCost,
+  adderCost,
+  adderRulesFrom,
+  adderString,
+  adderText,
+  adderTotal,
+  advantageTotal,
+  modifierTail,
+  realCost,
+} from './modifiers.ts';
 import type { CharacteristicSet } from './characteristics.ts';
 
 /**
@@ -34,7 +44,15 @@ export interface RenderedAbility {
   readonly rawCost: number;
   readonly cost: number;
   readonly notes: string;
+  /**
+   * True for a heading the player groups other entries under. A list is not an
+   * ability: it prints its name and leaves its cost column empty.
+   */
+  readonly isList: boolean;
 }
+
+/** The element name a list heading is stored under, in any section. */
+export const LIST_ELEMENT = 'LIST';
 
 export function ruleFor(system: RuleSystem, section: SectionName, id: string): RuleNode | undefined {
   return system.sections[section].entries.find((entry) => entry.id === id);
@@ -60,10 +78,19 @@ function separatorFor(skill: Ability): string {
 }
 
 /** Skills bought as levels, which read `+3 with All Combat` and price by option. */
-const LEVEL_SKILLS = new Set(['COMBAT_LEVELS', 'MENTAL_COMBAT_LEVELS', 'SKILL_LEVELS']);
+const LEVEL_SKILLS = new Set([
+  'COMBAT_LEVELS', 'MENTAL_COMBAT_LEVELS', 'SKILL_LEVELS', 'PENALTY_SKILL_LEVELS',
+]);
 
 export function skillText(skill: Ability, rule?: RuleNode): string {
   const option = skill.attributes['OPTION_ALIAS'] ?? '';
+  if (skill.xmlId === 'PENALTY_SKILL_LEVELS') {
+    // A penalty skill level says what it offsets and where it applies:
+    // `Penalty Skill Levels:  +4 vs. Range Modifier with a tight group of
+    // attacks (grapnel)`.
+    const levels = `${skill.levels >= 0 ? '+' : ''}${skill.levels}`;
+    return `${skill.alias}${SUBJECT_SEPARATOR}${levels} vs. ${skill.attributes['INPUT'] ?? ''} with ${option}`;
+  }
   if (LEVEL_SKILLS.has(skill.xmlId)) {
     return `${skill.levels >= 0 ? '+' : ''}${skill.levels} ${option}`.trim();
   }
@@ -134,15 +161,42 @@ export function buildSkill(
   system: RuleSystem,
   characteristics: CharacteristicSet,
 ): RenderedAbility {
+  if (skill.element === LIST_ELEMENT) {
+    return listHeading(skill);
+  }
   const rule = ruleFor(system, 'SKILLS', skill.xmlId);
-  const rawCost = skillCost(skill, rule);
+  const priced = withModifiers(skill, system, skillCost(skill, rule));
   return {
     source: skill,
-    text: skillText(skill, rule),
+    text: skillText(skill, rule) + priced.tail,
     roll: skillRoll(skill, rule, characteristics),
-    rawCost,
-    cost: roundHalfUp(rawCost),
+    rawCost: priced.rawCost,
+    cost: roundHalfUp(priced.rawCost),
     notes: skill.notes,
+    isList: false,
+  };
+}
+
+/**
+ * What modifiers do to an ability that is not a power.
+ *
+ * A skill or talent can be bought with advantages and limitations just as a
+ * power can, and then prices and reads the same way: the base cost becomes an
+ * active cost, the limitations divide it, and the description grows a tail.
+ */
+function withModifiers(
+  ability: Ability,
+  system: RuleSystem,
+  base: number,
+): { readonly rawCost: number; readonly tail: string } {
+  if (ability.modifiers.length === 0) {
+    return { rawCost: base, tail: '' };
+  }
+  const active = activeCost(base, ability.modifiers, system);
+  const real = realCost(active, ability.modifiers, system);
+  return {
+    rawCost: real,
+    tail: modifierTail(ability, { system }, { total: base, active, real }),
   };
 }
 
@@ -219,11 +273,16 @@ export function disadvantageText(disadvantage: Ability, rule?: RuleNode): string
   // The first option follows the subject with a comma, unless the rules give
   // the disadvantage its own separator. Only four disadvantages do, Hunted
   // among them, and they read "Hunted: Overwatch 8-" rather than
-  // "Reputation: \"...\", 11-".
-  const firstSeparator = rule?.attributes?.['ADDERSEPARATOR'] === undefined ? ', ' : ' ';
+  // "Reputation: \"...\", 11-". A disadvantage with no subject of its own —
+  // "Money:  Poor" — introduces its first option the way a subject would.
+  const firstSeparator = input.length === 0
+    ? SUBJECT_SEPARATOR
+    : rule?.attributes?.['ADDERSEPARATOR'] === undefined ? ', ' : ' ';
 
   let open = false;
-  disadvantage.adders.filter(isShown).forEach((adder, index) => {
+  // The dearest option comes first: a Hunted reads "(Mo Pow; NCI; Capture)"
+  // however the character file happens to store them.
+  sortedAdders(disadvantage.adders.filter(isShown), rule).forEach((adder, index) => {
     const option = adderOption(adder);
     if (option.length === 0) {
       return;
@@ -234,6 +293,28 @@ export function disadvantageText(disadvantage: Ability, rule?: RuleNode): string
   });
 
   return open ? `${text})` : text;
+}
+
+/**
+ * Options in the order the sheet lists them.
+ *
+ * What comes before the bracket stays as the character file has it — a Hunted
+ * leads with the roll it appears on. Inside the bracket the dearest comes
+ * first, which is how "(Mo Pow; NCI; Capture)" puts the 5-point NCI ahead of
+ * the free Capture whichever way round they are stored.
+ */
+function sortedAdders(adders: readonly Ability[], rule?: RuleNode): Ability[] {
+  const opens = adders.findIndex((adder) => adderOption(adder).startsWith('('));
+  if (opens < 0) {
+    return [...adders];
+  }
+  const rules = adderRulesFrom(rule);
+  const inside = adders
+    .slice(opens + 1)
+    .map((adder, index) => ({ adder, index, cost: adderCost(adder, rules(adder)) }))
+    .sort((a, b) => b.cost - a.cost || a.index - b.index)
+    .map((entry) => entry.adder);
+  return [...adders.slice(0, opens + 1), ...inside];
 }
 
 /** An option's own wording, falling back to the adder's name. */
@@ -251,6 +332,9 @@ export function buildDisadvantage(
   system: RuleSystem,
   rule?: RuleNode,
 ): RenderedAbility {
+  if (disadvantage.element === LIST_ELEMENT) {
+    return listHeading(disadvantage);
+  }
   // Modifiers multiply, as they do for powers: a Vulnerability's "2 x STUN"
   // multiplier is +1, which turns a 5-point disadvantage into a 10-point one.
   const base = disadvantage.baseCost + adderTotal(disadvantage.adders, adderRulesFrom(rule));
@@ -262,18 +346,36 @@ export function buildDisadvantage(
     rawCost,
     cost: roundHalfUp(rawCost),
     notes: disadvantage.notes,
+    isList: false,
   };
 }
 
-export function buildSimple(ability: Ability, rule?: RuleNode): RenderedAbility {
-  const rawCost = levelledCost(ability, rule);
+/** A list heading: its name, no roll, no cost. */
+export function listHeading(ability: Ability): RenderedAbility {
   return {
     source: ability,
-    text: simpleText(ability),
+    text: ability.alias,
     roll: '',
-    rawCost,
-    cost: roundHalfUp(rawCost),
+    rawCost: 0,
+    cost: 0,
     notes: ability.notes,
+    isList: true,
+  };
+}
+
+export function buildSimple(ability: Ability, system: RuleSystem, rule?: RuleNode): RenderedAbility {
+  if (ability.element === LIST_ELEMENT) {
+    return listHeading(ability);
+  }
+  const priced = withModifiers(ability, system, levelledCost(ability, rule));
+  return {
+    source: ability,
+    text: simpleText(ability) + priced.tail,
+    roll: '',
+    rawCost: priced.rawCost,
+    cost: roundHalfUp(priced.rawCost),
+    notes: ability.notes,
+    isList: false,
   };
 }
 

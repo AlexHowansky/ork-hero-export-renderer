@@ -1,17 +1,19 @@
 import type { Ability } from '../hdc/types.ts';
 import type { RuleNode, RuleSystem, SectionName } from '../rules/types.ts';
+import { isCharacteristicName } from './characteristics.ts';
+import { skillCost, skillText } from './abilities.ts';
 import { HeroError } from '../util/errors.ts';
 import { formatDice, formatInches, roundDown, roundHalfDown, roundHalfUp, roundUp } from './numbers.ts';
 import {
+  CONTINUING_ADDER,
   activeCost,
   adderCost,
   adderRulesFrom,
   adderString,
   limitationTotal,
-  modifierText,
-  modifierValue,
+  modifierTail,
   realCost,
-  sortedModifiers,
+  type Costs,
   type ModifierEnv,
 } from './modifiers.ts';
 
@@ -49,7 +51,9 @@ export interface RenderedPower {
 /** Powers whose levels are points of defence, printed as `(5 points)`. */
 const POINT_DEFENCES = new Set(['POWERDEFENSE', 'FLASHDEFENSE', 'MENTALDEFENSE', 'LACKOFWEAKNESS']);
 /** Powers measured in inches. */
-const DISTANCE_POWERS = new Set(['STRETCHING', 'RUNNING', 'SWIMMING', 'LEAPING', 'FLIGHT', 'TELEPORTATION']);
+const DISTANCE_POWERS = new Set([
+  'STRETCHING', 'RUNNING', 'SWIMMING', 'LEAPING', 'FLIGHT', 'GLIDING', 'SWINGING', 'TELEPORTATION',
+]);
 /** Powers measured in dice of effect. */
 const DICE_POWERS = new Set([
   'ENERGYBLAST', 'HEALING', 'DRAIN', 'AID', 'TRANSFER', 'EGOATTACK', 'RKA', 'HKA',
@@ -61,6 +65,16 @@ const AREA_POWERS = new Set(['CHANGEENVIRONMENT']);
 const ADJUSTMENT_POWERS = new Set(['HEALING', 'DRAIN', 'AID', 'TRANSFER', 'SUCCOR', 'ABSORPTION']);
 /** Elements that are frameworks rather than powers in their own right. */
 const FRAMEWORKS = new Set(['MULTIPOWER', 'ELEMENTAL_CONTROL', 'VPP']);
+/**
+ * A list is a heading the player groups entries under. It is not a power: it
+ * has no rules, no cost and no endurance, and prints as nothing but its name.
+ */
+const LIST_ELEMENT = 'LIST';
+/** A skill can be bought as a power, and then prints its roll and pays for modifiers. */
+const SKILL_ELEMENT = 'SKILL';
+/** An Endurance Reserve is two powers in one: the store, and what refills it. */
+const ENDURANCE_RESERVE = 'ENDURANCERESERVE';
+const ENDURANCE_RESERVE_REC = 'ENDURANCERESERVEREC';
 /**
  * Powers that name the senses they work on before anything else:
  * `Invisibility to Sight and Hearing Groups`, `Hearing Group Flash 3d6`.
@@ -78,8 +92,16 @@ export interface BuildPowerOptions {
   readonly framework?: Ability;
   /** What a Linked modifier's target is called on the sheet. */
   readonly linkTarget?: (id: string) => string | undefined;
-  /** `1" forward, 10 1/2" upward`, which only the characteristics know. */
-  readonly leapingNotes?: string;
+  /**
+   * What a movement power that raises the character's own total prints in
+   * brackets — `12" total`, or for Leaping `1" forward, 10 1/2" upward` — which
+   * only the characteristics know.
+   */
+  readonly movementNote?: (id: string) => string | undefined;
+  /** The character's STR, which Clinging quotes as its own strength. */
+  readonly strength?: number;
+  /** The roll a skill bought as a power shows after its name. */
+  readonly skillRoll?: (skill: Ability) => string;
 }
 
 export function buildPower(
@@ -87,8 +109,29 @@ export function buildPower(
   system: RuleSystem,
   options: BuildPowerOptions = {},
 ): RenderedPower {
+  if (power.element === LIST_ELEMENT) {
+    return {
+      source: power,
+      text: power.alias,
+      basePoints: 0,
+      active: 0,
+      real: 0,
+      cost: '',
+      end: '',
+      notes: power.notes,
+      isFramework: false,
+    };
+  }
+
   const rule = ruleForPower(system, power);
   const isFramework = FRAMEWORKS.has(power.element);
+
+  if (power.element === SKILL_ELEMENT) {
+    return skillAsPower(power, rule, system, options);
+  }
+  if (power.xmlId === ENDURANCE_RESERVE) {
+    return enduranceReserve(power, rule, system);
+  }
 
   const total = powerTotalCost(power, rule, system);
   const active = activeCost(total, power.modifiers, system);
@@ -109,6 +152,85 @@ export function buildPower(
     end: endColumn(power, rule, active, total, system),
     notes: power.notes,
     isFramework,
+  };
+}
+
+/**
+ * A skill listed among the powers — a voice modulator bought as Mimicry.
+ *
+ * It reads as a skill would, roll and all, but is priced as a power: its skill
+ * cost is the active cost that its limitations then divide.
+ */
+function skillAsPower(
+  skill: Ability,
+  rule: RuleNode | undefined,
+  system: RuleSystem,
+  options: BuildPowerOptions,
+): RenderedPower {
+  const total = skillCost(skill, rule);
+  const active = activeCost(total, skill.modifiers, system);
+  // A skill in a framework is priced by the framework, exactly as a power is.
+  const real = powerRealCost(skill, rule, active, system, options.framework);
+  const roll = options.skillRoll?.(skill) ?? '';
+  const text = `${skillText(skill, rule)}${roll.length > 0 ? ` ${roll}` : ''}`;
+  return {
+    source: skill,
+    text: text + modifierTail(skill, { system }, { total, active, real }),
+    basePoints: total,
+    active,
+    real,
+    cost: `${roundUp(real)}${slotSuffix(skill, options.framework)}`,
+    end: endColumn(skill, rule, active, total, system),
+    notes: skill.notes,
+    isFramework: false,
+  };
+}
+
+/**
+ * `Endurance Reserve  (100 END, 10 REC) Reserve:  (20 Active Points); IIF (…);
+ * REC:  (10 Active Points); Limited Recovery (…)`.
+ *
+ * The store and its recovery are bought and limited separately — the suit's
+ * battery is hard to get at, and only a wall socket refills it — so each half
+ * prints its own modifiers and pays its own price, and the sheet charges for
+ * both. The active points quoted against the reserve are the pair's together.
+ */
+function enduranceReserve(
+  power: Ability,
+  rule: RuleNode | undefined,
+  system: RuleSystem,
+): RenderedPower {
+  const recovery = power.children.find((child) => child.xmlId === ENDURANCE_RESERVE_REC);
+  const half = (part: Ability | undefined, partRule: RuleNode | undefined) => {
+    if (part === undefined) {
+      return { total: 0, active: 0, real: 0 };
+    }
+    const total = powerTotalCost(part, partRule, system);
+    const active = activeCost(total, part.modifiers, system);
+    return { total, active, real: realCost(active, part.modifiers, system) };
+  };
+
+  const store = half(power, rule);
+  const refill = half(recovery, rule?.children?.find((child) => child.id === ENDURANCE_RESERVE_REC));
+  const active = store.active + refill.active;
+  const real = roundUp(store.real) + roundUp(refill.real);
+
+  let text = `${power.alias}  (${power.levels} END, ${recovery?.levels ?? 0} REC)`;
+  text += ` Reserve: ${modifierTail(power, { system }, { ...store, active })}`;
+  if (recovery !== undefined) {
+    text += `; REC: ${modifierTail(recovery, { system }, refill)}`;
+  }
+
+  return {
+    source: power,
+    text,
+    basePoints: store.total + refill.total,
+    active,
+    real,
+    cost: String(real),
+    end: '0',
+    notes: power.notes,
+    isFramework: false,
   };
 }
 
@@ -151,6 +273,16 @@ function levelPrice(
   const option = chosenOption(rule, power);
   const attributes = rule?.attributes ?? {};
 
+  if (attributes['SENSECOST'] !== undefined) {
+    // A sense modifier is priced by how much it covers: one sense, a whole
+    // sense group, or every sense the character has.
+    const chosen = power.attributes['OPTIONID'] ?? '';
+    const key = chosen === 'ALL' ? 'ALLCOST' : chosen.endsWith('GROUP') ? 'GROUPCOST' : 'SENSECOST';
+    return {
+      value: num(attributes['LVLVAL'], 1),
+      cost: num(attributes[key], 0),
+    };
+  }
   if (attributes['TARGETINGCOST'] !== undefined) {
     const targeting = isTargetingGroup(system, power.attributes['OPTIONID']);
     return {
@@ -323,7 +455,12 @@ function endColumn(
     return '';
   }
   const charges = power.modifiers.find((modifier) => modifier.xmlId === 'CHARGES');
-  return charges === undefined ? '0' : `[${charges.attributes['OPTION_ALIAS'] ?? ''}]`;
+  if (charges === undefined) {
+    return '0';
+  }
+  // Charges that keep working once spent are marked as such: `[4 cc]`.
+  const continuing = charges.adders.some((adder) => adder.xmlId === CONTINUING_ADDER);
+  return `[${charges.attributes['OPTION_ALIAS'] ?? ''}${continuing ? ' cc' : ''}]`;
 }
 
 /** One point of END for every ten active points, before the modifiers that change that. */
@@ -380,12 +517,6 @@ export function endUsage(
 
 // ----------------------------------------------------------- description
 
-interface Costs {
-  readonly total: number;
-  readonly active: number;
-  readonly real: number;
-}
-
 function describe(
   power: Ability,
   rule: RuleNode | undefined,
@@ -394,7 +525,7 @@ function describe(
   costs: Costs,
   options: BuildPowerOptions,
 ): string {
-  return baseText(power, rule, system, costs, options) + modifierString(power, system, env, costs);
+  return baseText(power, rule, system, costs, options) + modifierTail(power, env, costs);
 }
 
 /**
@@ -410,7 +541,6 @@ function baseText(
 ): string {
   const rules = adderRulesFrom(rule);
   const option = powerOption(power, system);
-  const input = power.attributes['INPUT'] ?? '';
 
   if (FRAMEWORKS.has(power.element)) {
     // A Multipower is quoted by its reserve; an Elemental Control by the size
@@ -424,14 +554,7 @@ function baseText(
     return senseText(power, rule);
   }
 
-  if (power.xmlId === 'PENALTY_SKILL_LEVELS') {
-    return `${power.alias}:  ${signed(power.levels)} vs. ${input} with ${option}`;
-  }
-  if (power.xmlId === 'COMBAT_LEVELS' || power.xmlId === 'SKILL_LEVELS') {
-    return `${signed(power.levels)} ${option}`;
-  }
-
-  const adders = adderString(power.adders, rules, hiddenAdders(power));
+  const adders = adderString(power.adders, rules, hiddenAdders(power), separatorFor(power));
   const head = damageText(power, rule, options);
 
   // A killing or hand-to-hand attack brackets its adders; every other power
@@ -448,9 +571,9 @@ function baseText(
   if (AREA_POWERS.has(power.xmlId)) {
     return adders.length > 0 ? `${head} (${adders})` : head;
   }
-  const withOption = option.length > 0 && !POINT_DEFENCES.has(power.xmlId)
-    ? `${head} (${option})`
-    : head;
+  const namesOwnOption = POINT_DEFENCES.has(power.xmlId)
+    || rule?.attributes?.['SENSECOST'] !== undefined;
+  const withOption = option.length > 0 && !namesOwnOption ? `${head} (${option})` : head;
   return adders.length > 0 ? `${withOption}, ${adders}` : withOption;
 }
 
@@ -468,6 +591,11 @@ function powerOption(power: Ability, system: RuleSystem): string {
     return '';
   }
   return system.sections.POWERS.entries.find((entry) => entry.id === group)?.attributes?.['DISPLAY'] ?? '';
+}
+
+/** Life Support separates the environments it protects against with semicolons. */
+function separatorFor(power: Ability): string {
+  return power.xmlId === 'LIFESUPPORT' ? '; ' : ', ';
 }
 
 /**
@@ -490,6 +618,18 @@ function damageText(
   const alias = power.alias;
   const input = power.attributes['INPUT'];
 
+  // A sense modifier names the sense it sharpens: `Discriminatory with Normal
+  // Smell`, and for Enhanced Perception the levels it buys as well.
+  if (rule?.attributes?.['SENSECOST'] !== undefined) {
+    const head = power.xmlId === 'ENHANCEDPERCEPTION' ? `${signed(power.levels)} PER` : alias;
+    const sense = power.attributes['OPTION_ALIAS'] ?? '';
+    return sense.length > 0 ? `${head} with ${sense}` : head;
+  }
+  if (power.xmlId === 'CLINGING') {
+    // Clinging holds on with the character's own STR plus what was bought.
+    return `${alias} (${(options.strength ?? 0) + power.levels} STR)`;
+  }
+
   if (power.xmlId === 'ARMOR' || power.xmlId === 'FORCEFIELD') {
     return `${alias} (${defenceLevels(power)})`;
   }
@@ -511,14 +651,22 @@ function damageText(
   if (AREA_POWERS.has(power.xmlId)) {
     return `${alias} ${formatInches(areaRadius(power.levels))} radius`;
   }
-  if (power.xmlId === 'LEAPING' && power.attributes['AFFECTS_TOTAL'] === 'Yes') {
-    // A movement power that raises the character's own total prints what the
-    // total becomes, which for Leaping is a forward and an upward distance.
-    const label = options.leapingNotes ?? '';
-    return `${alias} ${signed(power.levels)}"${label.length > 0 ? ` (${label})` : ''}`;
+  const raises = power.attributes['AFFECTS_TOTAL'] === 'Yes'
+    ? options.movementNote?.(power.xmlId)
+    : undefined;
+  if (DISTANCE_POWERS.has(power.xmlId) && raises !== undefined) {
+    // A movement power that raises a movement characteristic prints what that
+    // becomes — `12" total`, or for Leaping a forward and an upward distance —
+    // and its own levels as the amount it adds. Stretching raises nothing, so
+    // it just says how far it reaches.
+    return `${alias} ${signed(power.levels)}"${raises.length > 0 ? ` (${raises})` : ''}`;
   }
   if (DISTANCE_POWERS.has(power.xmlId)) {
     return `${alias} ${formatInches(power.levels)}`;
+  }
+  if (power.xmlId === 'ENTANGLE') {
+    // An Entangle is as hard to break out of as it is strong.
+    return `${alias} ${formatDice(power.levels * 5)}, ${power.levels} DEF`;
   }
   if (DICE_POWERS.has(power.xmlId)) {
     // Adjustment powers name what they act on — "Healing STUN 5d6". An attack
@@ -528,6 +676,10 @@ function damageText(
       : '';
     const plus = power.xmlId === 'HANDTOHANDATTACK' ? '+' : '';
     return `${alias} ${subject}${plus}${formatDice(power.levels * 5)}`;
+  }
+  if (isCharacteristicName(power.xmlId)) {
+    // A characteristic bought as a power says how much it adds: `+23 STR`.
+    return `${signed(power.levels)} ${alias}`;
   }
   if (rule !== undefined) {
     // Everything else is named and left at that: Radar, Missile Deflection,
@@ -648,37 +800,12 @@ export function areaRadius(levels: number): number {
 }
 
 /**
- * The modifier tail: advantages, then the active-point note, then limitations.
- * The first limitation is introduced with a semicolon and the rest with commas.
- */
-function modifierString(
-  power: Ability,
-  system: RuleSystem,
-  env: ModifierEnv,
-  costs: Costs,
-): string {
-  const sorted = sortedModifiers(power.modifiers, system);
-  let text = '';
-  for (const modifier of sorted.filter((entry) => modifierValue(entry, system) >= 0)) {
-    text += `, ${modifierText(modifier, env).text}`;
-  }
-  if (
-    power.attributes['SHOW_ACTIVE_COST'] !== 'No' &&
-    (costs.active !== costs.total || costs.real !== costs.total)
-  ) {
-    text += ` (${roundUp(costs.active)} Active Points)`;
-  }
-  let count = 0;
-  for (const modifier of sorted.filter((entry) => modifierValue(entry, system) < 0)) {
-    text += `${++count === 1 ? '; ' : ', '}${modifierText(modifier, env).text}`;
-  }
-  return text;
-}
-
-/**
  * A framework contributes its reserve and each slot the price printed against
  * it, so the column adds up to what the sheet shows.
  */
 export function totalPowerCost(powers: readonly RenderedPower[]): number {
-  return roundHalfUp(powers.reduce((sum, power) => sum + Number.parseFloat(power.cost), 0));
+  // A list heading prints no cost at all, so it contributes nothing.
+  return roundHalfUp(
+    powers.reduce((sum, power) => sum + (Number.parseFloat(power.cost) || 0), 0),
+  );
 }

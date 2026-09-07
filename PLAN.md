@@ -202,15 +202,26 @@ plain-language message on failure. Package with dual ESM/CJS output, `exports` m
 
 ## Status
 
-All seven phases are implemented. The acceptance gate passes for both fixture
-characters: `Redshift.hdc` and `The Bismarck.hdc` each reproduce their exported
-sheet byte for byte in strict mode, verified through the library and the CLI.
+All seven phases are implemented. The acceptance gate passes for all three
+fixture characters: `Redshift.hdc`, `The Bismarck.hdc` and `Azarra.hdc` each
+reproduce their exported sheet byte for byte in strict mode, verified through the
+library and the CLI.
 
 The Bismarck settled two of the rules Redshift alone had left to guesswork — how
 an Area Of Effect sizes its area, and how an adder priced in the rules data is
 costed — and brought the cost model into line with HERO Designer's own: totals,
 active costs and real costs each round as they are worked out, with a rounder
 that throws away everything past the first decimal before rounding a half down.
+
+Azarra added the parts of a sheet that neither of the others has. Her powers are
+grouped under lists (`<LIST XMLID="GENERIC_OBJECT">`), which are headings rather
+than abilities and cost nothing. Almost everything she has is in a suit she can
+be parted from, so `AFFECTS_PRIMARY` and `AFFECTS_TOTAL` had to become two
+separate figures throughout — characteristics, defences and the perception roll
+each print `always-on/total` when the two differ. She also brought skills and
+talents bought with limitations, a skill bought as a power, an Endurance Reserve
+whose store and recovery are limited apart, continuing charges, sense modifiers,
+and a disadvantage whose options are listed dearest first.
 
 What is still inferred from the fixtures, and commented where it lives:
 
