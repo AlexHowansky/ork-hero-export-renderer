@@ -53,6 +53,17 @@ export interface Characteristic {
  */
 const FRACTIONAL_BASE = new Set(['SPD']);
 
+/**
+ * Characteristics whose figured base keeps every fraction it is made of.
+ *
+ * Everywhere else a contribution is rounded as it is taken — a STR 15, CON 21,
+ * BODY 20 character has a 39 STUN base, 20 + 8 + 11, rather than the 38 that
+ * rounding 20 + 7.5 + 10.5 in one go would give. SPD and Leaping are the two
+ * that do not: a DEX 26 character has a 3.6 SPD and leaps 3 1/2", and the sheet
+ * prints both fractions rather than the whole numbers they round to.
+ */
+const EXACT_BASE = new Set(['SPD', 'LEAPING']);
+
 /** Characteristics that show a roll on the sheet. */
 const HAS_ROLL = new Set(['STR', 'DEX', 'CON', 'BODY', 'INT', 'EGO', 'PRE', 'COM']);
 
@@ -215,7 +226,8 @@ function figuredBase(
     if (increase === undefined || per === undefined || sourceValue === undefined) {
       continue;
     }
-    base += (sourceValue * Number(increase)) / Number(per);
+    const contribution = (sourceValue * Number(increase)) / Number(per);
+    base += EXACT_BASE.has(id) ? contribution : roundHalfUp(contribution);
   }
   return base;
 }
@@ -256,6 +268,8 @@ export interface NotesContext {
   readonly defences?: { readonly value: string; readonly resistant: string } | undefined;
   /** What Enhanced Perception adds to the PER roll, always on and in total. */
   readonly perception?: { readonly primary: number; readonly total: number } | undefined;
+  /** The endurance the powers that raise a movement characteristic cost. */
+  readonly movementEnd?: number | undefined;
 }
 
 export function characteristicNotes(
@@ -265,10 +279,10 @@ export function characteristicNotes(
   context: NotesContext = {},
 ): string {
   const defenses = context.defences;
-  const { id, total } = characteristic;
+  const { id, total, value } = characteristic;
   switch (id) {
     case 'STR':
-      return `HTH Damage ${formatDice(total)}  END [${Math.max(1, roundHalfUp(total / 10))}]`;
+      return `HTH Damage ${formatDice(total)}  END [${Math.max(1, roundHalfDown(total / 10))}]`;
     case 'DEX': {
       const ocv = combatValue(set, system, 'OCV');
       const dcv = combatValue(set, system, 'DCV');
@@ -304,10 +318,14 @@ export function characteristicNotes(
       return `${formatInches(floorToHalf(forward))} forward, ${formatInches(floorToHalf(upward))} upward`;
     }
     case 'RUNNING':
-    case 'SWIMMING':
+    case 'SWIMMING': {
       // One point of END buys five inches of movement, so a character who has
-      // bought none of either spends none.
-      return `END [${total > 0 ? Math.max(1, roundHalfDown(total / 5)) : 0}]`;
+      // bought none of either spends none. A movement power that raises the
+      // characteristic charges its own endurance on top: Porcelain runs 10" of
+      // her own for 2 END and another 10" of slip for the power's 4.
+      const own = value > 0 ? Math.max(1, roundHalfDown(value / 5)) : 0;
+      return `END [${own + (context.movementEnd ?? 0)}]`;
+    }
     default:
       return '';
   }
@@ -332,6 +350,17 @@ export function phases(speed: number): number[] {
  */
 export function movementDistance(characteristic: Characteristic): number {
   return floorToHalf(characteristic.rawBase + characteristic.levels);
+}
+
+/**
+ * The Base column. SPD is written with its tenths whether it has any or not —
+ * a DEX 20 character shows a 3.0 base where a DEX 26 one shows 3.6 — and every
+ * other characteristic's base is a whole number.
+ */
+export function characteristicBaseValue(characteristic: Characteristic): string {
+  return FRACTIONAL_BASE.has(characteristic.id)
+    ? characteristic.base.toFixed(1)
+    : String(characteristic.base);
 }
 
 export function characteristicDisplayValue(characteristic: Characteristic): string {

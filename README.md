@@ -5,16 +5,18 @@ Renders HERO System character sheets by applying a HERO Designer export template
 Designer's own export function produces — without needing HERO Designer.
 
 **Status: complete.** Applying `fixtures/Ork-16x9.hde` to `fixtures/Redshift.hdc`,
-`fixtures/The Bismarck.hdc` and `fixtures/Azarra.hdc` reproduces
-`fixtures/Redshift.HTML`, `fixtures/The Bismarck.HTML` and `fixtures/Azarra.HTML`
+`fixtures/The Bismarck.hdc`, `fixtures/Azarra.hdc` and `fixtures/Porcelain.hdc`
+reproduces `fixtures/Redshift.HTML`, `fixtures/The Bismarck.HTML`,
+`fixtures/Azarra.HTML` and `fixtures/Porcelain.HTML`
 — the sheets HERO Designer exported from those same files — **byte for byte**,
 with strict mode on, through the command line and through the library alike.
 
-Between them the three characters cover a Multipower and an Elemental Control,
-attack, defence, sense and movement powers, charges, foci, linked powers, skill
-levels and a vehicle perk, lists of grouped powers and disadvantages, equipment
-that can be taken away and so prints two defence figures, an Endurance Reserve,
-and skills and talents bought with limitations. Where the arithmetic or the wording was not obvious,
+Between them the four characters cover a Multipower and an Elemental Control,
+attack, defence, sense, size and movement powers, charges, foci, linked powers,
+skill levels bought as skills and as powers, a vehicle perk, lists of grouped
+powers and disadvantages, equipment that can be taken away and so prints two
+defence figures, an Endurance Reserve, powers lent to other people, and skills
+and talents bought with limitations. Where the arithmetic or the wording was not obvious,
 it was taken from HERO Designer's own classes rather than guessed at; what is
 still an inference from the fixtures is commented where it lives.
 

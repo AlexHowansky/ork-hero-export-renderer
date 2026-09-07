@@ -4,6 +4,7 @@ import type { Ability } from '../hdc/types.ts';
 import { HeroError } from '../util/errors.ts';
 import { silentLogger, type Logger } from '../util/logger.ts';
 import {
+  characteristicBaseValue,
   characteristicDisplayValue,
   characteristicNotes,
   characteristicSecondaryValue,
@@ -225,7 +226,7 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
         case 'SECONDARY':
           return characteristicSecondaryValue(characteristic);
         case 'BASE':
-          return String(characteristic.base);
+          return characteristicBaseValue(characteristic);
         case 'COST':
           return String(characteristic.cost);
         case 'ROLL':
@@ -234,6 +235,7 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
           return characteristicNotes(characteristic, built.characteristics, built.system, {
             defences: defenceFor(built, id),
             perception: built.perception,
+            movementEnd: movementEnd(built, id),
           });
         case 'RESISTANT_TOTAL':
           return defenceFor(built, id)?.resistant ?? '0';
@@ -452,6 +454,16 @@ function defenceFor(sheet: Sheet, id: string): { value: string; resistant: strin
     return defenceFigures(defences.physical, defences.primaryPhysical);
   }
   return id === 'ED' ? defenceFigures(defences.energy, defences.primaryEnergy) : undefined;
+}
+
+/**
+ * The endurance the powers that raise a movement characteristic cost, which the
+ * sheet adds to what the characteristic itself spends.
+ */
+function movementEnd(sheet: Sheet, id: string): number {
+  return sheet.powers
+    .filter((power) => power.source.xmlId === id && power.source.attributes['AFFECTS_TOTAL'] !== 'No')
+    .reduce((total, power) => total + (Number.parseInt(power.end, 10) || 0), 0);
 }
 
 /** Whether the characteristic a container is on has a conditional half to show. */

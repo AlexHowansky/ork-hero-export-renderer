@@ -16,7 +16,8 @@ import { buildCharacteristics, characteristicNotes, type CharacteristicSet } fro
 import { characteristicBonuses, collectDefences, type Defences } from '../model/defenses.ts';
 import { buildPower, totalPowerCost, type RenderedPower } from '../model/powers.ts';
 import { summarisePoints, type PointsSummary } from '../model/points.ts';
-import { formatInches, roundHalfUp } from '../model/numbers.ts';
+import { characterSize } from '../model/size.ts';
+import { formatInches, formatRoll, roundHalfUp } from '../model/numbers.ts';
 
 /**
  * Everything a template can ask about, worked out once before rendering starts.
@@ -73,13 +74,13 @@ export function buildSheet(
     contributors,
     characteristics.byId.get('PD')?.value ?? 0,
     characteristics.byId.get('ED')?.value ?? 0,
+    characteristics.byId.get('EGO')?.total ?? 0,
   );
 
   const allSkills = character.skills.map((skill) => buildSkill(skill, system, characteristics));
   // Combat levels are listed twice: once among the skills they were bought
   // with, and once in their own table.
   const skills = allSkills;
-  const combatLevels = allSkills.filter((skill) => COMBAT_LEVEL_IDS.has(skill.source.xmlId));
 
   const perks = character.perks.map((perk) =>
     buildSimple(perk, system, ruleFor(system, 'PERKS', perk.xmlId)),
@@ -124,12 +125,17 @@ export function buildSheet(
       : `${formatInches(characteristic.total)} total`;
   };
   const strength = characteristics.byId.get('STR')?.total ?? 0;
+  const size = characterSize(character.info.height, character.info.weight);
   const build = (power: Ability) =>
     buildPower(power, system, {
       ...options,
       linkTarget,
       movementNote,
       strength,
+      size,
+      ego: characteristics.byId.get('EGO')?.total ?? 0,
+      perceptionRoll: (levels) =>
+        formatRoll((characteristics.byId.get('INT')?.total ?? 0) + levels * 5),
       skillRoll: (skill) => skillRoll(skill, ruleFor(system, 'SKILLS', skill.xmlId), characteristics),
       ...(power.parentId !== undefined && frameworksById.has(power.parentId)
         ? { framework: frameworksById.get(power.parentId) as Ability }
@@ -137,6 +143,12 @@ export function buildSheet(
     });
   const powers = character.powers.map(build);
   const equipment = character.equipment.map(build);
+  // A combat level can also be bought as a power — Porcelain's slip braces her
+  // allies' joints — and then belongs in the combat level table just the same.
+  const combatLevels = [
+    ...allSkills.filter((skill) => COMBAT_LEVEL_IDS.has(skill.source.xmlId)),
+    ...powers.filter((power) => COMBAT_LEVEL_IDS.has(power.source.xmlId)).map(asAbility),
+  ];
   const maneuvers = character.martialArts.map((maneuver) => buildManeuver(maneuver, strength));
 
   const frameworkIds = new Set(grouped.flatMap((section) => [...section.keys()]));
@@ -176,6 +188,19 @@ export function buildSheet(
     perception,
     frameworkIds,
     slotIds,
+  };
+}
+
+/** A power read as the ability it also is, for the tables that list both. */
+function asAbility(power: RenderedPower): RenderedAbility {
+  return {
+    source: power.source,
+    text: power.text,
+    roll: '',
+    rawCost: power.real,
+    cost: roundHalfUp(power.real),
+    notes: power.notes,
+    isList: false,
   };
 }
 

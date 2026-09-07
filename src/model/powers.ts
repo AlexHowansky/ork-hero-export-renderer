@@ -4,6 +4,8 @@ import { isCharacteristicName } from './characteristics.ts';
 import { skillCost, skillText } from './abilities.ts';
 import { HeroError } from '../util/errors.ts';
 import { formatDice, formatInches, roundDown, roundHalfDown, roundHalfUp, roundUp } from './numbers.ts';
+import { growthDetail, shrinkingDetail, type CharacterSize } from './size.ts';
+import { mentalDefenceFromEgo } from './defenses.ts';
 import {
   CONTINUING_ADDER,
   activeCost,
@@ -82,6 +84,8 @@ const ENDURANCE_RESERVE_REC = 'ENDURANCERESERVEREC';
 const SENSE_POWERS = new Set(['INVISIBILITY', 'DARKNESS', 'FLASH', 'IMAGES', 'CLAIRSENTIENCE']);
 /** Attack powers that bracket their adders rather than listing them after a comma. */
 const BRACKETS_ADDERS = new Set(['RKA', 'HKA', 'KILLINGATTACK', 'HANDTOHANDATTACK']);
+/** Stands in for a character whose height and weight were never recorded. */
+const NO_SIZE: CharacterSize = { heightInches: 0, weightPounds: 0 };
 /** The sections a power's rules can live in, in the order they are searched. */
 const RULE_SECTIONS: readonly SectionName[] = ['POWERS', 'CHARACTERISTICS', 'SKILLS', 'TALENTS'];
 
@@ -102,6 +106,12 @@ export interface BuildPowerOptions {
   readonly strength?: number;
   /** The roll a skill bought as a power shows after its name. */
   readonly skillRoll?: (skill: Ability) => string;
+  /** The character's EGO, which counts towards Mental Defense. */
+  readonly ego?: number;
+  /** The PER roll a sense such as Detect prints, given the levels bought. */
+  readonly perceptionRoll?: (levels: number) => string;
+  /** How tall and how heavy the character is, which the size powers quote. */
+  readonly size?: CharacterSize;
 }
 
 export function buildPower(
@@ -571,6 +581,26 @@ function baseText(
   if (AREA_POWERS.has(power.xmlId)) {
     return adders.length > 0 ? `${head} (${adders})` : head;
   }
+  // Detect names what it senses, how well the character rolls to notice it,
+  // and only then the sense group it belongs to.
+  if (power.xmlId === 'DETECT') {
+    const roll = options.perceptionRoll?.(power.levels) ?? '';
+    const group = senseGroup(power, system);
+    const detected = [head, option, roll].filter((part) => part.length > 0).join(' ');
+    const detail = group.length > 0 ? `${detected} (${group})` : detected;
+    return adders.length > 0 ? `${detail}, ${adders}` : detail;
+  }
+  // Shape Shift brackets its sense group together with the shapes it can take,
+  // and keeps the space where its (empty) amount would have gone.
+  if (power.xmlId === 'SHAPESHIFT') {
+    // The shapes on offer are chosen as an option of an adder that asks not to
+    // be listed as one, so the power quotes the option itself.
+    const shapes = power.adders
+      .filter((adder) => adder.attributes['DISPLAYINSTRING'] === 'No')
+      .map((adder) => adder.attributes['OPTION_ALIAS'] ?? '');
+    const inside = [option, ...shapes, adders].filter((part) => part.length > 0).join(', ');
+    return inside.length > 0 ? `${head}  (${inside})` : head;
+  }
   const namesOwnOption = POINT_DEFENCES.has(power.xmlId)
     || rule?.attributes?.['SENSECOST'] !== undefined;
   const withOption = option.length > 0 && !namesOwnOption ? `${head} (${option})` : head;
@@ -586,6 +616,15 @@ function powerOption(power: Ability, system: RuleSystem): string {
   if (option !== undefined && option.length > 0) {
     return option;
   }
+  const group = power.attributes['GROUP'];
+  if (group === undefined) {
+    return '';
+  }
+  return system.sections.POWERS.entries.find((entry) => entry.id === group)?.attributes?.['DISPLAY'] ?? '';
+}
+
+/** What the rules call the sense group a power perceives with. */
+function senseGroup(power: Ability, system: RuleSystem): string {
   const group = power.attributes['GROUP'];
   if (group === undefined) {
     return '';
@@ -626,8 +665,29 @@ function damageText(
     return sense.length > 0 ? `${head} with ${sense}` : head;
   }
   if (power.xmlId === 'CLINGING') {
-    // Clinging holds on with the character's own STR plus what was bought.
-    return `${alias} (${(options.strength ?? 0) + power.levels} STR)`;
+    // Clinging holds on with the character's own STR plus what was bought, and
+    // says so as "normal STR" when nothing was bought.
+    return power.levels === 0
+      ? `${alias} (normal STR)`
+      : `${alias} (${(options.strength ?? 0) + power.levels} STR)`;
+  }
+  if (power.xmlId === 'TELEKINESIS') {
+    // Telekinesis lifts as if it had a strength of its own.
+    return `${alias} (${power.levels} STR)`;
+  }
+  if (power.xmlId === 'EXTRALIMBS') {
+    return `${alias}  (${power.levels})`;
+  }
+  if (power.xmlId === 'GROWTH') {
+    return `${alias} (${growthDetail(power, rule, options.size ?? NO_SIZE)})`;
+  }
+  if (power.xmlId === 'SHRINKING') {
+    return `${alias} (${shrinkingDetail(power, rule, options.size ?? NO_SIZE)})`;
+  }
+  if (power.xmlId === 'DESOLIDIFICATION') {
+    // Desolidification names what it can be affected by, and keeps the space
+    // before it even when the player named nothing.
+    return `${alias} ${input ?? ''}`;
   }
 
   if (power.xmlId === 'ARMOR' || power.xmlId === 'FORCEFIELD') {
@@ -639,6 +699,12 @@ function damageText(
   if (POINT_DEFENCES.has(power.xmlId)) {
     const option = power.attributes['OPTION_ALIAS'] ?? '';
     const prefix = option.length > 0 ? `${option} ` : '';
+    // Mental Defense counts the character's own EGO towards its points, and
+    // writes the figure as a total to say so.
+    if (power.xmlId === 'MENTALDEFENSE') {
+      const points = power.levels + mentalDefenceFromEgo(options.ego ?? 0);
+      return `${prefix}${alias} (${points} points total)`;
+    }
     return `${prefix}${alias} (${power.levels} points)`;
   }
   if (power.xmlId === 'KBRESISTANCE') {
@@ -698,14 +764,16 @@ function damageText(
 
 function defenceLevels(power: Ability): string {
   const parts: string[] = [];
-  const add = (key: string, label: string) => {
+  const add = (key: string, label: string, always = false) => {
     const levels = num(power.attributes[key], 0);
-    if (levels > 0) {
+    if (levels > 0 || always) {
       parts.push(`${levels} ${label}`);
     }
   };
-  add('PDLEVELS', 'PD');
-  add('EDLEVELS', 'ED');
+  // Armor bought against one kind of damage still says how much it stops of
+  // the other: "Armor (6 PD/0 ED)".
+  add('PDLEVELS', 'PD', true);
+  add('EDLEVELS', 'ED', true);
   add('MDLEVELS', 'Mental Def.');
   add('FDLEVELS', 'Flash Def.');
   add('POWDLEVELS', 'Power Def.');

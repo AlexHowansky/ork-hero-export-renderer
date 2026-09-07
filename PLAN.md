@@ -202,10 +202,10 @@ plain-language message on failure. Package with dual ESM/CJS output, `exports` m
 
 ## Status
 
-All seven phases are implemented. The acceptance gate passes for all three
-fixture characters: `Redshift.hdc`, `The Bismarck.hdc` and `Azarra.hdc` each
-reproduce their exported sheet byte for byte in strict mode, verified through the
-library and the CLI.
+All seven phases are implemented. The acceptance gate passes for all four
+fixture characters: `Redshift.hdc`, `The Bismarck.hdc`, `Azarra.hdc` and
+`Porcelain.hdc` each reproduce their exported sheet byte for byte in strict mode,
+verified through the library and the CLI.
 
 The Bismarck settled two of the rules Redshift alone had left to guesswork — how
 an Area Of Effect sizes its area, and how an adder priced in the rules data is
@@ -222,6 +222,20 @@ each print `always-on/total` when the two differ. She also brought skills and
 talents bought with limitations, a skill bought as a power, an Endurance Reserve
 whose store and recovery are limited apart, continuing charges, sense modifiers,
 and a disadvantage whose options are listed dearest first.
+
+Porcelain settled how a figured characteristic is put together — each source's
+contribution is rounded as it is taken, so her STR 15 and CON 21 give a 39 STUN
+base rather than 38, and only SPD and Leaping keep their fractions — and brought
+the two powers that describe themselves in the character's own measurements.
+Growth and Shrinking read the height and weight from the character file (inches
+and pounds) and print metres and kilogrammes, against the per-level figures in
+the rules data. She also lends her powers to other people, which puts a combat
+skill level among the powers as well as in the combat level table, and adds a
+movement power's endurance to what the characteristic itself spends; and she
+brought Detect, Mental Defense counting EGO towards its points, Shape Shift,
+Desolidification, Telekinesis, Extra Limbs, a familiarity that rolls against the
+flat number in the rules, and a Reputation written both as a perk and as a
+disadvantage.
 
 What is still inferred from the fixtures, and commented where it lives:
 

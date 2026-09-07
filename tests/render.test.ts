@@ -18,14 +18,17 @@ const APP_VERSION = '20260405';
 /**
  * The characters the renderer is held to, each with the moment its reference
  * sheet was exported. Redshift is a fifth-edition multipower character; The
- * Bismarck is a fifth-edition Elemental Control one; and Azarra groups her
- * powers into lists and keeps most of them in a suit she can be parted from.
- * Between them they cover most of what a sheet can say.
+ * Bismarck is a fifth-edition Elemental Control one; Azarra groups her powers
+ * into lists and keeps most of them in a suit she can be parted from; and
+ * Porcelain changes size, lends her powers to other people, and carries the
+ * defences and senses the others do not. Between them they cover most of what a
+ * sheet can say.
  */
 const CHARACTERS = [
   { name: 'Redshift', savedAt: SAVED_AT },
   { name: 'The Bismarck', savedAt: new Date(2026, 8, 6, 18, 1, 6) },
   { name: 'Azarra', savedAt: new Date(2026, 8, 6, 19, 34, 26) },
+  { name: 'Porcelain', savedAt: new Date(2026, 8, 7, 10, 32, 24) },
 ] as const;
 
 interface Rendering {
@@ -386,6 +389,127 @@ describe('Azarra, whose powers live in a suit', () => {
     expect(points.totalPoints).toBe(400);
     expect(points.experienceSpent).toBe(0);
     expect(points.experienceUnspent).toBe(15);
+  });
+});
+
+describe('Porcelain, who changes size', () => {
+  const porcelain = () => of('Porcelain');
+
+  test('fills in the document header', () => {
+    expect(porcelain().rendered).toContain('<title>Porcelain</title>');
+    expect(porcelain().rendered).toContain('content="Porcelain.hdc"');
+    expect(porcelain().rendered).toContain('content="Mon, 7 Sep 2026 10:32:24"');
+  });
+
+  // Growth and Shrinking quote the character's own height and weight — kept as
+  // inches and pounds in the file, printed as metres and kilogrammes — against
+  // the per-level figures in the rules. Growth rounds them to whole units where
+  // Shrinking measures to four decimal places.
+  test('measures the character growing and shrinking', () => {
+    const text = (xmlId: string) =>
+      porcelain().sheet.powers.find((power) => power.source.xmlId === xmlId)?.text;
+    expect(text('GROWTH')?.startsWith(
+      'Growth (+30 STR, +6 BODY, +6 STUN, -6" KB, 2,496 kg, -4 DCV, ' +
+        '+4 PER Rolls to perceive character, 7 m tall, 3 m wide)',
+    )).toBe(true);
+    expect(text('SHRINKING')?.startsWith(
+      'Shrinking (0.2037 m tall, 0.0762 kg mass, -6 PER Rolls to perceive character, +6 DCV)',
+    )).toBe(true);
+  });
+
+  test('describes the powers this character brought that the others did not', () => {
+    const text = (xmlId: string) =>
+      porcelain().sheet.powers.find((power) => power.source.xmlId === xmlId)?.text;
+    // Detect names what it senses, the roll to notice it, and its sense group.
+    expect(text('DETECT')).toBe('Detect A Single Thing 13- (Sight Group)');
+    // Mental Defense counts the character's own EGO towards its points.
+    expect(text('MENTALDEFENSE')).toBe('Mental Defense (13 points total)');
+    // Clinging bought at no levels holds on with nothing but the character.
+    expect(text('CLINGING')?.startsWith('Clinging (normal STR)')).toBe(true);
+    // Telekinesis lifts with a strength of its own.
+    expect(text('TELEKINESIS')?.startsWith('Telekinesis (40 STR)')).toBe(true);
+    expect(text('EXTRALIMBS')).toBe('Extra Limbs  (2)');
+    // Shape Shift brackets its sense group with the shapes it can take.
+    expect(text('SHAPESHIFT')?.startsWith('Shape Shift  (Sight Group, any shape)')).toBe(true);
+    // Desolidification keeps the space where what it is affected by would go.
+    expect(text('DESOLIDIFICATION')?.startsWith('Desolidification ,')).toBe(true);
+    // Armor bought against one kind of damage still says how much it stops of
+    // the other.
+    expect(text('ARMOR')?.startsWith('Armor (6 PD/0 ED)')).toBe(true);
+  });
+
+  // A Mental Defense power brings the character's EGO with it; a character
+  // without one shows no mental defence however high their EGO.
+  test('counts EGO towards mental defence', () => {
+    expect(porcelain().sheet.defences.mental).toBe(13);
+    expect(of('Redshift').sheet.defences.mental).toBe(0);
+    expect(porcelain().rendered).toContain('<td class="text-start">Mental</td>\n<td>13</td>');
+  });
+
+  // A combat level can be bought as a power, and then belongs in the combat
+  // level table as much as one bought among the skills does.
+  test('lists a combat level bought as a power', () => {
+    const { combatLevels, skills } = porcelain().sheet;
+    expect(combatLevels).toHaveLength(1);
+    expect(combatLevels[0]?.source.element).toBe('SKILL');
+    expect(combatLevels[0]?.text.startsWith('+3 with All Combat, Ranged (+1/2)')).toBe(true);
+    expect(skills.some((skill) => skill.source.xmlId === 'COMBAT_LEVELS')).toBe(false);
+    expect(porcelain().rendered).toContain('id="combat-skill-levels-block"');
+  });
+
+  // A skill taken only as a familiarity rolls against the flat number the rules
+  // give it, however good the characteristic behind it is.
+  test('rolls a familiarity against its own number', () => {
+    const rolls = porcelain().sheet.skills
+      .filter((skill) => skill.source.attributes['FAMILIARITY'] === 'Yes')
+      .map((skill) => [skill.text, skill.roll]);
+    expect(rolls).toEqual([
+      ['High Society (Custom Adder)', '8-'],
+      ['Science Skill:  meteorology', '8-'],
+    ]);
+  });
+
+  // A Reputation is written one way as a perk and another as a disadvantage,
+  // and the disadvantage's second bracketed option continues the first's group
+  // rather than opening one of its own.
+  test('writes a reputation both ways round', () => {
+    expect(porcelain().sheet.perks.map((perk) => perk.text)).toEqual([
+      'Reputation:  rescuer, healer (A large group) 11-, +1/+1d6',
+    ]);
+    const disad = porcelain().sheet.disadvantages
+      .find((entry) => entry.source.xmlId === 'REPUTATION');
+    expect(disad?.text).toBe('Reputation:  The Dream Stealer, 11- (Extreme;  Known Only To A Small Group)');
+  });
+
+  // A movement power that raises the characteristic charges its own endurance
+  // on top of what the character's own movement costs: 10" of her for 2 END,
+  // and another 10" of slip for the power's 4.
+  test('adds a movement power’s endurance to the characteristic’s own', () => {
+    const { sheet: built, rendered } = porcelain();
+    expect(built.characteristics.byId.get('RUNNING')?.value).toBe(10);
+    expect(built.characteristics.byId.get('RUNNING')?.total).toBe(20);
+    expect(built.powers.find((power) => power.source.element === 'RUNNING')?.end).toBe('4');
+    expect(rendered).toContain('END [6]');
+  });
+
+  // Each figured contribution is rounded as it is taken: STR 15 and CON 21 give
+  // 8 and 11, not the 7.5 and 10.5 that would total a point lower. SPD is the
+  // exception, and prints its tenths whether it has any or not.
+  test('figures the bases the sheet shows', () => {
+    const { characteristics } = porcelain().sheet;
+    expect(characteristics.byId.get('STUN')?.base).toBe(39);
+    expect(characteristics.byId.get('SPD')?.base).toBe(3);
+    expect(porcelain().rendered).toContain('<td>SPD</td>\n<td>3.0</td>');
+    // STR 15 spends a point of endurance, not the two it would round up to.
+    expect(porcelain().rendered).toContain('HTH Damage 3d6  END [1]');
+  });
+
+  test('adds up to the totals on the sheet', () => {
+    const { points } = porcelain().sheet;
+    expect(points.totalPoints).toBe(472);
+    expect(points.disadPointsUsed).toBe(115);
+    expect(points.experienceSpent).toBe(57);
+    expect(points.experienceUnspent).toBe(19);
   });
 });
 

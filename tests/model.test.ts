@@ -127,11 +127,14 @@ describe('characteristics', () => {
   });
 
   // Figured bases come from the rules data, not a hard-coded table: STR carries
-  // PDINCREASE="1" PDINCREASELEVELS="5".
+  // PDINCREASE="1" PDINCREASELEVELS="5". Each contribution is rounded as it is
+  // taken — STR 18 gives 4 PD, not 3.6 — except for the two characteristics
+  // that keep their fractions.
   test('derives figured bases from the rules', () => {
-    expect(characteristics.byId.get('PD')?.rawBase).toBeCloseTo(3.6, 9);
+    expect(characteristics.byId.get('PD')?.rawBase).toBe(4);
     expect(characteristics.byId.get('STUN')?.rawBase).toBe(29);
     expect(characteristics.byId.get('SPD')?.rawBase).toBeCloseTo(3.6, 9);
+    expect(characteristics.byId.get('LEAPING')?.rawBase).toBeCloseTo(3.6, 9);
   });
 
   test('figures combat values from DEX and EGO in fifth edition', () => {

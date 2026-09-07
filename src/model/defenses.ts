@@ -1,5 +1,6 @@
 import type { Ability } from '../hdc/types.ts';
 import type { Bonus } from './characteristics.ts';
+import { roundHalfUp } from './numbers.ts';
 
 /**
  * Movement powers that raise the characteristic they are named after. Leaping
@@ -54,13 +55,25 @@ export function collectDefences(
   sources: readonly Ability[],
   characteristicPd: number,
   characteristicEd: number,
+  ego = 0,
   primaryPd = characteristicPd,
   primaryEd = characteristicEd,
 ): Defences {
   return {
-    ...totals(sources, characteristicPd, characteristicEd, (source) => affectsTotal(source)),
-    ...primaryTotals(sources, primaryPd, primaryEd),
+    ...totals(sources, characteristicPd, characteristicEd, ego, (source) => affectsTotal(source)),
+    ...primaryTotals(sources, primaryPd, primaryEd, ego),
   };
+}
+
+/**
+ * What a character's own EGO is worth as Mental Defense.
+ *
+ * It counts only for a character who has bought the power at all — which is why
+ * the sheet writes that total as "13 points total" rather than "10 points" —
+ * and a character with no Mental Defense shows none however high their EGO.
+ */
+export function mentalDefenceFromEgo(ego: number): number {
+  return roundHalfUp(ego / 5);
 }
 
 /** A source marked off on both counts nowhere; one marked off on the primary counts only in the total. */
@@ -76,8 +89,9 @@ function primaryTotals(
   sources: readonly Ability[],
   pd: number,
   ed: number,
+  ego: number,
 ): Pick<Defences, 'primaryPhysical' | 'primaryEnergy'> {
-  const { physical, energy } = totals(sources, pd, ed, affectsPrimary);
+  const { physical, energy } = totals(sources, pd, ed, ego, affectsPrimary);
   return { primaryPhysical: physical, primaryEnergy: energy };
 }
 
@@ -85,6 +99,7 @@ function totals(
   sources: readonly Ability[],
   characteristicPd: number,
   characteristicEd: number,
+  ego: number,
   keep: (source: Ability) => boolean,
 ): Defences {
   const added: Contribution = {
@@ -122,7 +137,7 @@ function totals(
         added.power += source.levels;
         break;
       case 'MENTALDEFENSE':
-        added.mental += source.levels;
+        added.mental += source.levels + mentalDefenceFromEgo(ego);
         break;
       default:
         break;

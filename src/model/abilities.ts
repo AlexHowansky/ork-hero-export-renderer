@@ -124,8 +124,14 @@ export function skillRoll(
   rule: RuleNode | undefined,
   characteristics: CharacteristicSet,
 ): string {
-  if (rule?.attributes?.['FAMILIARITYROLL'] === undefined || isYes(skill.attributes['FAMILIARITY'])) {
+  const familiarityRoll = rule?.attributes?.['FAMILIARITYROLL'];
+  if (familiarityRoll === undefined) {
     return '';
+  }
+  // A skill taken only as a familiarity rolls against the flat number the rules
+  // give it, however good the characteristic behind it is.
+  if (isYes(skill.attributes['FAMILIARITY'])) {
+    return `${familiarityRoll}-`;
   }
   const characteristic = skill.attributes['CHARACTERISTIC'] ?? 'GENERAL';
   const base = characteristics.byId.get(characteristic);
@@ -206,6 +212,9 @@ function withModifiers(
  * item carries.
  */
 export function simpleText(ability: Ability): string {
+  if (ability.xmlId === 'REPUTATION') {
+    return reputationText(ability);
+  }
   const parts: string[] = [ability.alias];
   const input = ability.attributes['INPUT'];
   if (input !== undefined && input.length > 0) {
@@ -218,6 +227,33 @@ export function simpleText(ability: Ability): string {
   const adders = ability.adders.map((adder) => adderText(adder));
   if (adders.length > 0) {
     parts.push(` (${adders.join('; ')})`);
+  }
+  return parts.join('');
+}
+
+/**
+ * `Reputation:  rescuer, healer (A large group) 11-, +1/+1d6`.
+ *
+ * A positive Reputation is described by two adders that ask not to be listed as
+ * adders: how widely the character is known, which is bracketed, and how often
+ * they are recognised, which follows it. The levels bought are what the
+ * reputation is worth in play — a bonus to interaction rolls and to PRE
+ * attacks alike.
+ */
+function reputationText(perk: Ability): string {
+  const option = (xmlId: string): string =>
+    perk.adders.find((adder) => adder.xmlId === xmlId)?.attributes['OPTION_ALIAS'] ?? '';
+  const parts = [perk.alias, SUBJECT_SEPARATOR, perk.attributes['INPUT'] ?? ''];
+  const known = option('HOWWIDE');
+  if (known.length > 0) {
+    parts.push(` (${known})`);
+  }
+  const recognised = option('HOWWELL');
+  if (recognised.length > 0) {
+    parts.push(` ${recognised}`);
+  }
+  if (perk.levels > 0) {
+    parts.push(`, +${perk.levels}/+${perk.levels}d6`);
   }
   return parts.join('');
 }
@@ -288,8 +324,14 @@ export function disadvantageText(disadvantage: Ability, rule?: RuleNode): string
       return;
     }
     const startsGroup = option.startsWith('(');
-    text += startsGroup ? ` ${option}` : `${index === 0 ? firstSeparator : '; '}${option}`;
-    open ||= startsGroup;
+    if (startsGroup) {
+      // A second bracket does not open a second group: it continues the one
+      // already open, as another option separated from the first.
+      text += open ? `;  ${option.slice(1)}` : ` ${option}`;
+      open = true;
+    } else {
+      text += `${index === 0 ? firstSeparator : '; '}${option}`;
+    }
   });
 
   return open ? `${text})` : text;
