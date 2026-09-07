@@ -34,11 +34,12 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli/render.js dist/cli/extract-rules.js",
+    "pack:check": "bun run build && bun pm pack --dry-run",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "extract-rules": "bun run src/cli/extract-rules.ts",
     "render": "bun run src/cli/render.ts",
-    "prepublishOnly": "bun run build && bun test"
+    "prepublishOnly": "bun run typecheck && bun run build && bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",
