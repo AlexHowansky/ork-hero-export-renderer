@@ -10,15 +10,23 @@ import type { Logger } from '../util/logger.ts';
  * allowed; the expression is parsed here rather than handed to anything that
  * could execute it.
  */
+/**
+ * Anything that is not part of an expression is dropped before it is read. The
+ * equipment table divides one money figure by another to get a quantity, and
+ * those figures carry their currency: `$100/$100` is one item, not a syntax
+ * error.
+ */
+const NOT_ARITHMETIC = /[^-0-9.+*/^()\s]/g;
+
 export function evaluateMath(expression: string, options: { strict: boolean; logger: Logger }): string {
-  const source = expression.trim();
+  const source = expression.replace(NOT_ARITHMETIC, '').trim();
   try {
     const parser = new Parser(source);
     const value = parser.parseExpression();
     parser.expectEnd();
     return formatResult(value);
   } catch (error) {
-    const message = `Could not work out the calculation "${source}" in a <!--MATH--> block.`;
+    const message = `Could not work out the calculation "${expression.trim()}" in a <!--MATH--> block.`;
     if (options.strict) {
       throw new HeroError(message, { cause: error });
     }

@@ -72,6 +72,7 @@ export function parseCharacterFile(input: Uint8Array | string, source?: string):
     templateId: templateIdFromReference(templateReference, source),
     configuration: readConfiguration(childNamed(root, 'BASIC_CONFIGURATION')),
     info: readInfo(childNamed(root, 'CHARACTER_INFO')),
+    houseRules: childNamed(root, 'RULES')?.attributes ?? {},
     ...sections,
     ...(image === undefined ? {} : { image: readImage(image) }),
   };

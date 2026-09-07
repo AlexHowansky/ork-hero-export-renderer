@@ -1,15 +1,13 @@
 import type { Ability } from '../hdc/types.ts';
-import type { Bonus } from './characteristics.ts';
+import { isCharacteristicName, type Bonus } from './characteristics.ts';
 import { roundHalfUp } from './numbers.ts';
 
 /**
- * Movement powers that raise the characteristic they are named after. Leaping
- * is not among them: it is tracked as a forward and an upward distance, which
- * a power can raise one of without the other.
+ * Leaping is the one characteristic a power named after it does not simply add
+ * to: it is tracked as a forward and an upward distance, which a power can
+ * raise one of without the other.
  */
-const MOVEMENT_POWERS = new Set([
-  'RUNNING', 'SWIMMING', 'FLIGHT', 'GLIDING', 'SWINGING', 'TELEPORTATION', 'TUNNELING',
-]);
+const NOT_A_BONUS = new Set(['LEAPING']);
 
 /**
  * Defences, gathered from everything that grants them.
@@ -133,6 +131,12 @@ function totals(
         added.resistantPhysical += number(source.attributes['PDLEVELS']);
         added.resistantEnergy += number(source.attributes['EDLEVELS']);
         break;
+      case 'PD':
+        added.physical += source.levels;
+        break;
+      case 'ED':
+        added.energy += source.levels;
+        break;
       case 'POWERDEFENSE':
         added.power += source.levels;
         break;
@@ -164,12 +168,19 @@ export function defenceFigures(
   total: DefenceTotals,
   primary: DefenceTotals,
 ): { readonly value: string; readonly resistant: string } {
-  if (total.total === primary.total) {
+  // The defence itself decides whether the pair is shown at all: a character
+  // whose PD does not change with the suit reads `12 PD (12 rPD)` however much
+  // of it the suit makes resistant. Once it is shown, the resistant half is
+  // still written as one figure when it is the same either way — a suit that
+  // adds 5 PD and no resistance reads `3/8 PD (0 rPD)`.
+  if (primary.total === total.total) {
     return { value: String(total.total), resistant: String(total.resistant) };
   }
   return {
     value: `${primary.total}/${total.total}`,
-    resistant: `${primary.resistant}/${total.resistant}`,
+    resistant: primary.resistant === total.resistant
+      ? String(total.resistant)
+      : `${primary.resistant}/${total.resistant}`,
   };
 }
 
@@ -194,9 +205,10 @@ export function characteristicBonuses(sources: readonly Ability[]): Bonus[] {
         { id: 'ED', amount: number(source.attributes['EDLEVELS']), ...flags },
       );
     }
-    // Running bought as a power raises the Running characteristic, and with it
-    // the distance and the endurance the sheet prints against it.
-    if (MOVEMENT_POWERS.has(source.xmlId)) {
+    // A characteristic bought as a power raises that characteristic: Running
+    // bought as a power lengthens the stride and the endurance printed against
+    // it, and +5 STR bought in a suit is 5 more STR while the suit is on.
+    if (isCharacteristicName(source.xmlId) && !NOT_A_BONUS.has(source.xmlId)) {
       bonuses.push({ id: source.xmlId, amount: source.levels, ...flags });
     }
   }

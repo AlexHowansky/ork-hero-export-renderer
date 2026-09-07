@@ -140,7 +140,13 @@ export function skillRoll(
     // flat — rolls against a fixed number.
     return `${GENERAL_SKILL_ROLL + skill.levels}-`;
   }
-  return formatRoll(base.total + skill.levels * 5);
+  const roll = formatRoll(base.total + skill.levels * 5);
+  if (base.primary === base.total) {
+    return roll;
+  }
+  // The characteristic behind the skill is not all always on, so the skill
+  // rolls two ways and the better one follows in brackets.
+  return `${formatRoll(base.primary + skill.levels * 5)} (${roll})`;
 }
 
 /**

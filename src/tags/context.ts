@@ -6,6 +6,7 @@ import { silentLogger, type Logger } from '../util/logger.ts';
 import {
   characteristicBaseValue,
   characteristicDisplayValue,
+  movementUnits,
   characteristicNotes,
   characteristicSecondaryValue,
   combatValue,
@@ -14,6 +15,7 @@ import {
   isCharacteristicName,
 } from '../model/characteristics.ts';
 import { defenceFigures } from '../model/defenses.ts';
+import { equipmentFigures } from '../model/equipment.ts';
 import { formatJavaDouble, formatRoll, roundHalfUp } from '../model/numbers.ts';
 import type { RenderedAbility, RenderedManeuver } from '../model/abilities.ts';
 import { totalPowerCost, type RenderedPower } from '../model/powers.ts';
@@ -84,7 +86,7 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
     if (simple !== undefined) {
       return simple;
     }
-    const scoped = scopedTag(current(), name);
+    const scoped = scopedTag(sheet, current(), name);
     if (scoped !== undefined) {
       return scoped;
     }
@@ -166,15 +168,15 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
       case 'IF_SECONDARY':
         return when(secondaryOf(sheet, current()), render);
       case 'IS_LIST':
-        return when(isFramework(sheet, current()), render);
+        return when(heads(sheet, current()), render);
       case 'IS_NOT_LIST':
-        return when(!isFramework(sheet, current()), render);
+        return when(!heads(sheet, current()), render);
       case 'IS_LIST_ITEM':
         return when(isSlot(sheet, current()), render);
       case 'IS_NOT_LIST_ITEM':
         return when(!isSlot(sheet, current()), render);
       case 'IS_ENHANCER':
-        return when(false, render);
+        return when(isEnhancer(sheet, current()), render);
 
       case 'MATH':
         return evaluateMath(render(), { strict: options.strict !== false, logger });
@@ -222,7 +224,7 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
         case 'PRIMARY':
         case 'VAL':
         case 'TOTAL':
-          return characteristicDisplayValue(characteristic);
+          return characteristicDisplayValue(characteristic, movementUnits(built.system));
         case 'SECONDARY':
           return characteristicSecondaryValue(characteristic);
         case 'BASE':
@@ -230,7 +232,14 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
         case 'COST':
           return String(characteristic.cost);
         case 'ROLL':
-          return hasRoll(id) ? formatRoll(characteristic.total) : '';
+          if (!hasRoll(id, built.system)) {
+            return '';
+          }
+          // A characteristic something raises without being always on rolls two
+          // ways, and the sheet shows both: `11- / 12-`.
+          return characteristic.primary === characteristic.total
+            ? formatRoll(characteristic.total)
+            : `${formatRoll(characteristic.primary)} / ${formatRoll(characteristic.total)}`;
         case 'NOTES':
           return characteristicNotes(characteristic, built.characteristics, built.system, {
             defences: defenceFor(built, id),
@@ -326,6 +335,13 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
       case 'ECV':
       case 'PRIMARY_ECV':
         return combat(built, 'ECV', name === 'ECV');
+      // The mental combat values are characteristics of their own in sixth
+      // edition and nothing at all in fifth, where the directive is left as it
+      // stands rather than printed as a blank.
+      case 'PRIMARY_OMCV':
+        return built.characteristics.byId.get('OMCV')?.total.toString();
+      case 'PRIMARY_DMCV':
+        return built.characteristics.byId.get('DMCV')?.total.toString();
 
       case 'MENTAL_DEFENSE_TOTAL':
         return String(built.defences.mental);
@@ -347,6 +363,21 @@ export function createContext(sheet: Sheet, options: ContextOptions = {}): Rende
   }
 
   function combat(built: Sheet, which: 'OCV' | 'DCV' | 'ECV', rounded: boolean): string {
+    // Sixth edition splits the mental combat value in two and prints the pair,
+    // where fifth edition figures a single ECV from EGO.
+    if (which === 'ECV') {
+      const offensive = built.characteristics.byId.get('OMCV');
+      const defensive = built.characteristics.byId.get('DMCV');
+      if (offensive !== undefined && defensive !== undefined) {
+        return `${offensive.total} - ${defensive.total}`;
+      }
+    }
+    // A combat value bought as a characteristic is a whole number and prints
+    // as one; a figured one keeps every place of the division that made it.
+    const own = built.characteristics.byId.get(which);
+    if (own !== undefined) {
+      return String(own.total);
+    }
     const value = combatValue(built.characteristics, built.system, which);
     if (value === undefined) {
       return missing(which, 'this character has no such combat value');
@@ -365,7 +396,7 @@ function roundedPrimary(which: 'OCV' | 'DCV' | 'ECV', value: number): number {
   return which === 'DCV' ? roundHalfUp(value) : value;
 }
 
-function scopedTag(scope: Scope, name: string): string | undefined {
+function scopedTag(sheet: Sheet, scope: Scope, name: string): string | undefined {
   const { rendered, power, maneuver, ability } = scope;
   switch (name) {
     case 'NAME':
@@ -386,7 +417,10 @@ function scopedTag(scope: Scope, name: string): string | undefined {
     case 'SKILL_ROLL':
     case 'PERK_ROLL':
     case 'TALENT_ROLL':
-      return rendered?.roll;
+      // A skill enhancer does not roll at all — as opposed to rolling and
+      // showing nothing, which is what a familiarity does — and HERO Designer
+      // writes the directive itself out rather than an empty space.
+      return rendered === undefined || isEnhancer(sheet, scope) ? undefined : rendered.roll;
     case 'SKILL_COST':
     case 'PERK_COST':
     case 'TALENT_COST':
@@ -416,6 +450,17 @@ function scopedTag(scope: Scope, name: string): string | undefined {
     case 'POWER_NOTES':
     case 'EQUIPMENT_NOTES':
       return power?.notes;
+    case 'EQUIPMENT_VALUE':
+    case 'EQUIPMENT_TOTAL_VALUE':
+    case 'EQUIPMENT_TOTAL_WEIGHT': {
+      if (ability === undefined) {
+        return undefined;
+      }
+      const figures = equipmentFigures(ability, sheet.character.houseRules);
+      return name === 'EQUIPMENT_VALUE'
+        ? figures.value
+        : name === 'EQUIPMENT_TOTAL_VALUE' ? figures.totalValue : figures.totalWeight;
+    }
 
     case 'MANEUVER_NAME':
       return maneuver?.name;
@@ -458,12 +503,39 @@ function defenceFor(sheet: Sheet, id: string): { value: string; resistant: strin
 
 /**
  * The endurance the powers that raise a movement characteristic cost, which the
- * sheet adds to what the characteristic itself spends.
+ * sheet adds to what the characteristic itself spends. A power the character
+ * can be parted from counts towards the total but not the always-on figure, and
+ * the endurance is then printed as a pair like everything else.
  */
-function movementEnd(sheet: Sheet, id: string): number {
-  return sheet.powers
-    .filter((power) => power.source.xmlId === id && power.source.attributes['AFFECTS_TOTAL'] !== 'No')
-    .reduce((total, power) => total + (Number.parseInt(power.end, 10) || 0), 0);
+function movementEnd(sheet: Sheet, id: string): { primary: number; total: number } {
+  let primary = 0;
+  let total = 0;
+  for (const power of sheet.powers) {
+    const { attributes, xmlId } = power.source;
+    if (xmlId !== id || attributes['AFFECTS_TOTAL'] === 'No') {
+      continue;
+    }
+    const end = Number.parseInt(power.end, 10) || 0;
+    total += end;
+    if (attributes['AFFECTS_PRIMARY'] !== 'No') {
+      primary += end;
+    }
+  }
+  return { primary, total };
+}
+
+/**
+ * Whether the item a loop is on heads a group of others. A framework does, and
+ * so does a skill enhancer, whether or not anything is grouped under it yet.
+ */
+function heads(sheet: Sheet, scope: Scope): boolean {
+  return isFramework(sheet, scope) || isEnhancer(sheet, scope);
+}
+
+function isEnhancer(sheet: Sheet, scope: Scope): boolean {
+  const id = scope.ability?.xmlId;
+  return id !== undefined
+    && sheet.system.sections.SKILL_ENHANCERS.entries.some((entry) => entry.id === id);
 }
 
 /** Whether the characteristic a container is on has a conditional half to show. */

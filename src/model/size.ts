@@ -26,6 +26,11 @@ export interface CharacterSize {
   readonly weightPounds: number;
 }
 
+/** Pounds as HERO Designer writes them in metric: kilogrammes. */
+export function kilogrammes(pounds: number): number {
+  return (pounds * GRAMMES_PER_POUND) / 1000;
+}
+
 export function characterSize(height: string, weight: string): CharacterSize {
   return { heightInches: number(height), weightPounds: number(weight) };
 }
@@ -92,9 +97,8 @@ function increase(rule: RuleNode | undefined, key: string, levels: number): numb
 
 function mass(size: CharacterSize, rule: RuleNode | undefined, levels: number): number {
   const attributes = rule?.attributes ?? {};
-  const kilogrammes = (size.weightPounds * GRAMMES_PER_POUND) / 1000;
   const multiplier = number(attributes['MASSMULTIPLIER'], 1);
-  return kilogrammes * multiplier ** blocks(levels, attributes['MASSMULTIPLIERLEVELS']);
+  return kilogrammes(size.weightPounds) * multiplier ** blocks(levels, attributes['MASSMULTIPLIERLEVELS']);
 }
 
 function height(size: CharacterSize, rule: RuleNode | undefined, levels: number): number {

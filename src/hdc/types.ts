@@ -23,6 +23,11 @@ export interface CharacterFile {
   readonly powers: readonly Ability[];
   readonly disadvantages: readonly Ability[];
   readonly equipment: readonly Ability[];
+  /**
+   * The `<RULES>` element: the campaign's own settings, kept verbatim. What a
+   * piece of equipment costs is priced and written in the units named here.
+   */
+  readonly houseRules: Readonly<Record<string, string>>;
   readonly image?: CharacterImage;
 }
 

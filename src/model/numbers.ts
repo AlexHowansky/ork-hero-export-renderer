@@ -120,7 +120,11 @@ export function formatRoll(value: number): string {
   return `${9 + roundHalfUp(value / 5)}-`;
 }
 
-/** Distances are written in inches with a fraction, as in `3 1/2"`. */
-export function formatInches(value: number): string {
-  return `${formatFraction(value)}"`;
+/**
+ * A distance and its unit, as in `3 1/2"` or `5m`. Fifth edition measures the
+ * map in inches and sixth edition in metres, and the sheet writes whichever the
+ * character's own rules use.
+ */
+export function formatDistance(value: number, units: string): string {
+  return `${formatFraction(value)}${units}`;
 }

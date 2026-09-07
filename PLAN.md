@@ -202,10 +202,10 @@ plain-language message on failure. Package with dual ESM/CJS output, `exports` m
 
 ## Status
 
-All seven phases are implemented. The acceptance gate passes for all four
-fixture characters: `Redshift.hdc`, `The Bismarck.hdc`, `Azarra.hdc` and
-`Porcelain.hdc` each reproduce their exported sheet byte for byte in strict mode,
-verified through the library and the CLI.
+All seven phases are implemented. The acceptance gate passes for all five
+fixture characters: `Redshift.hdc`, `The Bismarck.hdc`, `Azarra.hdc`,
+`Porcelain.hdc` and `Six.hdc` each reproduce their exported sheet byte for byte
+in strict mode, verified through the library and the CLI.
 
 The Bismarck settled two of the rules Redshift alone had left to guesswork — how
 an Area Of Effect sizes its area, and how an adder priced in the rules data is
@@ -236,6 +236,41 @@ brought Detect, Mental Defense counting EGO towards its points, Shape Shift,
 Desolidification, Telekinesis, Extra Limbs, a familiarity that rolls against the
 flat number in the rules, and a Reputation written both as a perk and as a
 disadvantage.
+
+Six is the sixth-edition character, and the only one with equipment. Sixth
+edition buys OCV, DCV, OMCV and DMCV as characteristics rather than figuring them
+from DEX and EGO, so they print as whole numbers, DEX's note is empty, BODY no
+longer rolls, and the mental pair is written `ECV 4 - 4`; the edition is told
+from the rules data itself, by whether it defines OMCV. It measures the map in
+metres rather than inches — the same distances said differently, a point of
+endurance covering ten metres where fifth edition covers five inches. Its
+equipment is bought with money rather than character points, in the currency,
+decimal places and conversion named in the character file's own `<RULES>`
+element, and weighed in kilogrammes; the quantity column divides one money figure
+by another, so `<!--MATH-->` ignores anything that is not part of a number. Six
+also brought skill enhancers, which head a group of skills the way a framework
+heads its slots and, unlike a familiarity, do not roll at all — HERO Designer
+leaves `<!--SKILL_ROLL-->` itself in the sheet.
+
+Six buys every characteristic a second time as a power that is not always on,
+which settled how the sheet writes a figure it has two of. Any characteristic
+bought as a power raises that characteristic — not just the movement ones —
+which puts a second figure in the Value column and, with it, a second roll
+(`11- / 12-`), a second PRE Attack (`2d6 / 3d6`), a second set of Phases and a
+second HTH damage and endurance (`HTH Damage 2d6/3d6  END [1/2]`, which the
+template's own fraction replacement then writes as `END [½]`). The separators
+are HERO Designer's and are not consistent; a skill inherits the pair from the
+characteristic it rolls against and brackets it instead (`11- (12-)`); a defence
+prints the pair only when the defence itself changes, and then writes its
+resistant half as one figure when that does not; and a movement power adds its
+endurance to the figure it belongs to rather than to both.
+
+It also settled two rounding questions. A characteristic's cost column never
+rounds away something that was paid for — one END costs a fifth of a point in
+sixth edition and the sheet writes 1 — and the power column, which rounds each
+cost up, is totalled from the exact costs rather than the printed ones: a
+part-block of levels costs the fraction it is, so two powers that each cost 2 1/2
+print 3 and add up to 5.
 
 What is still inferred from the fixtures, and commented where it lives:
 

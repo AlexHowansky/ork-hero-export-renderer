@@ -7,6 +7,8 @@ import { renderTemplate } from '../src/template/renderer.ts';
 import { applyReplacements } from '../src/template/postprocess.ts';
 import { buildSheet, type Sheet } from '../src/tags/sheet.ts';
 import { createContext, formatTimestamp } from '../src/tags/context.ts';
+import { characteristicNotes } from '../src/model/characteristics.ts';
+import { equipmentFigures } from '../src/model/equipment.ts';
 import { evaluateMath } from '../src/tags/math.ts';
 import { silentLogger } from '../src/util/logger.ts';
 import { HeroError } from '../src/util/errors.ts';
@@ -19,16 +21,18 @@ const APP_VERSION = '20260405';
  * The characters the renderer is held to, each with the moment its reference
  * sheet was exported. Redshift is a fifth-edition multipower character; The
  * Bismarck is a fifth-edition Elemental Control one; Azarra groups her powers
- * into lists and keeps most of them in a suit she can be parted from; and
- * Porcelain changes size, lends her powers to other people, and carries the
- * defences and senses the others do not. Between them they cover most of what a
- * sheet can say.
+ * into lists and keeps most of them in a suit she can be parted from; Porcelain
+ * changes size, lends her powers to other people, and carries the defences and
+ * senses the others do not; and Six is a sixth-edition character with equipment,
+ * skill enhancers, and a map measured in metres. Between them they cover most of
+ * what a sheet can say.
  */
 const CHARACTERS = [
   { name: 'Redshift', savedAt: SAVED_AT },
   { name: 'The Bismarck', savedAt: new Date(2026, 8, 6, 18, 1, 6) },
   { name: 'Azarra', savedAt: new Date(2026, 8, 6, 19, 34, 26) },
   { name: 'Porcelain', savedAt: new Date(2026, 8, 7, 10, 32, 24) },
+  { name: 'Six', savedAt: new Date(2026, 8, 7, 11, 49, 32) },
 ] as const;
 
 interface Rendering {
@@ -510,6 +514,151 @@ describe('Porcelain, who changes size', () => {
     expect(points.disadPointsUsed).toBe(115);
     expect(points.experienceSpent).toBe(57);
     expect(points.experienceUnspent).toBe(19);
+  });
+});
+
+describe('Six, a sixth-edition character with equipment', () => {
+  const six = () => of('Six');
+
+  test('fills in the document header', () => {
+    expect(six().rendered).toContain('<title>Six</title>');
+    expect(six().rendered).toContain('content="Six.hdc"');
+    expect(six().rendered).toContain('content="Mon, 7 Sep 2026 11:49:32"');
+    expect(six().sheet.character.templateId).toBe('Superheroic6E');
+  });
+
+  // Sixth edition buys the combat values as characteristics rather than figuring
+  // them from DEX and EGO, so they print as the whole numbers they are, DEX has
+  // nothing left to say, and the mental pair is written side by side.
+  test('buys its combat values rather than figuring them', () => {
+    const { sheet: built, rendered } = six();
+    expect(built.characteristics.byId.get('OCV')?.total).toBe(4);
+    expect(built.characteristics.byId.get('OMCV')?.total).toBe(4);
+    expect(rendered).toContain('<td>OCV 4</td>');
+    expect(rendered).toContain('<td class="text-end">ECV 4 - 4</td>');
+    // Where a fifth-edition sheet carries the unrounded division that made it.
+    expect(rendered).toContain('<span class="primary">4</span>\n</td>\n<td>OMCV</td>');
+    expect(of('Redshift').rendered).toContain('8.666666666666666');
+    // DEX figures nothing, and BODY no longer rolls.
+    expect(characteristicNotes(
+      built.characteristics.byId.get('DEX')!,
+      built.characteristics,
+      built.system,
+    )).toBe('');
+    expect(rendered).toContain('<td class="roll" data-skill="BODY"></td>');
+    expect(of('Redshift').rendered).toContain('<td class="roll" data-skill="BODY">11-</td>');
+  });
+
+  // Sixth edition measures the map in metres, which are the same distances said
+  // differently: 12m of Running where fifth edition has 6", and a point of
+  // endurance for every ten metres rather than every five inches.
+  test('measures movement in metres', () => {
+    const { sheet: built, rendered } = six();
+    expect(built.characteristics.byId.get('RUNNING')?.primary).toBe(13);
+    expect(rendered).toContain('<span class="primary">5m/2 1/2m</span>');
+    expect(rendered).toContain('5m forward, 2 1/2m upward');
+    expect(built.equipment[0]?.text).toBe('Flight 10m');
+    const running = built.powers.find((power) => power.source.xmlId === 'RUNNING');
+    expect(running?.text).toBe('Running +5m (13m/18m total)');
+  });
+
+  // Every characteristic is raised by a power that is not always on, so every
+  // figure the sheet prints twice is printed twice here. The separator is HERO
+  // Designer's own and is not the same in every column.
+  test('prints both figures for everything that has two', () => {
+    const { sheet: built, rendered } = six();
+    const notes = (id: string) => characteristicNotes(
+      built.characteristics.byId.get(id)!,
+      built.characteristics,
+      built.system,
+      { defences: id === 'PD' ? { value: '3/8', resistant: '0' } : undefined },
+    );
+    expect(built.characteristics.byId.get('STR')).toMatchObject({ primary: 11, total: 16 });
+    // The Roll column spaces its slash where the notes run the halves together.
+    expect(rendered).toContain('<td class="roll" data-skill="STR">11- / 12-</td>');
+    expect(notes('STR')).toBe('HTH Damage 2d6/3d6  END [1/2]');
+    expect(notes('INT')).toBe('PER Roll 11-/12-');
+    expect(notes('PRE')).toBe('PRE Attack: 2d6 / 3d6');
+    expect(notes('SPD')).toBe('Phases:  4, 8, 12/2, 3, 5, 6, 8, 9, 11, 12');
+    expect(notes('PD')).toBe('3/8 PD (0 rPD)');
+    // A movement power charges its own endurance on top of the characteristic's,
+    // and only against the figure it belongs to.
+    expect(rendered).toContain('<span class="primary">13</span>\n/ <span class="secondary">18</span>');
+    // The template's own replacement then turns that 1/2 into a fraction.
+    expect(rendered).toContain('<td class="text-start">END [½]</td>');
+  });
+
+  // The pair is shown at all only when the defence itself changes: Redshift's
+  // PD does not, however much of it Damage Resistance makes resistant.
+  test('pairs a defence figure only when the defence changes', () => {
+    expect(six().sheet.defences).toMatchObject({
+      physical: { total: 8, resistant: 0 },
+      primaryPhysical: { total: 3, resistant: 0 },
+    });
+    expect(six().rendered).toContain('<td>3/8</td>');
+    expect(of('Redshift').rendered).toContain('12 PD (12 rPD)');
+    expect(of('Azarra').rendered).toContain('6/16 PD (0/10 rPD)');
+  });
+
+  // A skill rolls against a characteristic, so it inherits the pair — written
+  // its own way, with the better roll in brackets.
+  test('rolls a skill both ways', () => {
+    const acting = six().sheet.skills.find((skill) => skill.source.xmlId === 'ACTING');
+    expect([acting?.roll, acting?.notes]).toEqual(['11- (12-)', 'test note']);
+    expect(six().rendered).toContain('<div class="note">Note: test note</div>');
+    // A talent carries its note the same way.
+    expect(six().sheet.talents[0]?.notes).toBe('test note');
+  });
+
+  // Equipment is bought with money rather than character points, in the currency
+  // the campaign's own rules name, and carries a weight.
+  test('prices and weighs equipment', () => {
+    const { sheet: built, rendered } = six();
+    expect(built.character.houseRules['EQUIPMENTCOSTUNITS']).toBe('$');
+    expect(equipmentFigures(built.equipment[0]!.source, built.character.houseRules)).toEqual({
+      value: '$100',
+      totalValue: '$100',
+      totalWeight: '10.00kg',
+    });
+    expect(rendered).toContain('<td>10.00kg</td>');
+    expect(rendered).toContain('<td>$100</td>');
+    // The quantity column divides the total by the unit price, currency and all.
+    expect(rendered).toContain('<td>\n\n1\n\n</td>');
+    // Equipment costs no character points, so the totals are unmoved by it.
+    expect(built.points.totalPoints).toBe(183);
+  });
+
+  // A skill enhancer heads a group of skills rather than being one, so it takes
+  // the list markup and its own icon — and, unlike a familiarity, it does not
+  // roll at all: HERO Designer leaves the directive itself in the sheet.
+  test('marks skill enhancers and leaves their roll unwritten', () => {
+    const { rendered } = six();
+    expect(rendered).toContain(
+      '<span class="roll" data-skill="Jack of All Trades"><!--SKILL_ROLL--></span>',
+    );
+    expect(rendered).toContain('<td class="list ">\n\nJack of All Trades\n<i class="fa-solid fa-microscope');
+    // A perk can be an enhancer too.
+    expect(rendered).toContain('<td class="list ">\n\nWell-Connected\n<i class="fa-solid fa-microscope');
+    // A familiarity does roll, and shows nothing; the two are not the same.
+    expect(of('Redshift').rendered).toContain(
+      '<span class="roll" data-skill="Language:  German (basic conversation)"></span>',
+    );
+  });
+
+  // The cost column rounds, but never rounds away something that was paid for:
+  // one END costs a fifth of a point in sixth edition and the sheet writes 1.
+  // The totals are added from the exact costs, so two powers that each cost
+  // 2 1/2 and print 3 come to 5.
+  test('rounds the columns but totals the exact costs', () => {
+    const { sheet: built, rendered } = six();
+    const end = built.characteristics.byId.get('END');
+    expect([end?.rawCost, end?.cost]).toEqual([0.2, 1]);
+    expect(built.characteristics.totalCost).toBe(40);
+    const stun = built.powers.find((power) => power.source.xmlId === 'STUN');
+    const swimming = built.powers.find((power) => power.source.xmlId === 'SWIMMING');
+    expect([stun?.real, stun?.cost]).toEqual([2.5, '3']);
+    expect([swimming?.real, swimming?.cost]).toEqual([2.5, '3']);
+    expect(rendered).toContain('<th>116</th>');
   });
 });
 

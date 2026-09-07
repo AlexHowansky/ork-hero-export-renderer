@@ -4,19 +4,20 @@ Renders HERO System character sheets by applying a HERO Designer export template
 (`*.hde`) to a character file (`*.hdc`), producing the same HTML that HERO
 Designer's own export function produces — without needing HERO Designer.
 
-**Status: complete.** Applying `fixtures/Ork-16x9.hde` to `fixtures/Redshift.hdc`,
-`fixtures/The Bismarck.hdc`, `fixtures/Azarra.hdc` and `fixtures/Porcelain.hdc`
-reproduces `fixtures/Redshift.HTML`, `fixtures/The Bismarck.HTML`,
-`fixtures/Azarra.HTML` and `fixtures/Porcelain.HTML`
-— the sheets HERO Designer exported from those same files — **byte for byte**,
-with strict mode on, through the command line and through the library alike.
+**Status: complete.** Applying `fixtures/Ork-16x9.hde` to each of
+`fixtures/Redshift.hdc`, `fixtures/The Bismarck.hdc`, `fixtures/Azarra.hdc`,
+`fixtures/Porcelain.hdc` and `fixtures/Six.hdc` reproduces the matching
+`fixtures/*.HTML` — the sheets HERO Designer exported from those same files —
+**byte for byte**, with strict mode on, through the command line and through the
+library alike.
 
-Between them the four characters cover a Multipower and an Elemental Control,
-attack, defence, sense, size and movement powers, charges, foci, linked powers,
-skill levels bought as skills and as powers, a vehicle perk, lists of grouped
-powers and disadvantages, equipment that can be taken away and so prints two
-defence figures, an Endurance Reserve, powers lent to other people, and skills
-and talents bought with limitations. Where the arithmetic or the wording was not obvious,
+Between them the five characters cover both editions, a Multipower and an
+Elemental Control, attack, defence, sense, size and movement powers, charges,
+foci, linked powers, skill levels bought as skills and as powers, skill
+enhancers, a vehicle perk, lists of grouped powers and disadvantages, a suit
+that can be taken away and so prints two defence figures, equipment bought with
+money and carried at a weight, an Endurance Reserve, powers lent to other
+people, and skills and talents bought with limitations. Where the arithmetic or the wording was not obvious,
 it was taken from HERO Designer's own classes rather than guessed at; what is
 still an inference from the fixtures is commented where it lives.
 

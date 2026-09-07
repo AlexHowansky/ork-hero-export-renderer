@@ -3,7 +3,7 @@ import type { RuleNode, RuleSystem, SectionName } from '../rules/types.ts';
 import { isCharacteristicName } from './characteristics.ts';
 import { skillCost, skillText } from './abilities.ts';
 import { HeroError } from '../util/errors.ts';
-import { formatDice, formatInches, roundDown, roundHalfDown, roundHalfUp, roundUp } from './numbers.ts';
+import { formatDice, formatDistance, roundDown, roundHalfDown, roundHalfUp, roundUp } from './numbers.ts';
 import { growthDetail, shrinkingDetail, type CharacterSize } from './size.ts';
 import { mentalDefenceFromEgo } from './defenses.ts';
 import {
@@ -112,6 +112,8 @@ export interface BuildPowerOptions {
   readonly perceptionRoll?: (levels: number) => string;
   /** How tall and how heavy the character is, which the size powers quote. */
   readonly size?: CharacterSize;
+  /** What the map is measured in: inches in fifth edition, metres in sixth. */
+  readonly units?: string;
 }
 
 export function buildPower(
@@ -327,13 +329,13 @@ export function powerTotalCost(power: Ability, rule: RuleNode | undefined, syste
   let total = power.baseCost;
   const { value, cost } = levelPrice(power, rule, system);
   if (value !== 0) {
-    let blocks = Math.floor(power.levels / value);
-    if (power.levels % value !== 0 && value > 1) {
-      blocks += 1;
-    }
-    total += blocks * cost;
-    if (cost < value) {
-      total = total > 0 && total < 1 ? 1 : roundHalfDown(total);
+    // Levels are priced by the block — Armor is 3 points for every 2 points of
+    // defence — and a part-block is charged as the fraction it is. The column
+    // rounds it up to print, but the exact figure is what the totals add.
+    total += (power.levels * cost) / value;
+    // A power still costs a point when its levels come to less than one.
+    if (cost < value && total > 0 && total < 1) {
+      total = 1;
     }
   }
 
@@ -656,6 +658,7 @@ function damageText(
 ): string {
   const alias = power.alias;
   const input = power.attributes['INPUT'];
+  const units = options.units ?? '"';
 
   // A sense modifier names the sense it sharpens: `Discriminatory with Normal
   // Smell`, and for Enhanced Perception the levels it buys as well.
@@ -715,7 +718,7 @@ function damageText(
     return `${alias} ${power.levels}" through ${power.levels + bonus} DEF material`;
   }
   if (AREA_POWERS.has(power.xmlId)) {
-    return `${alias} ${formatInches(areaRadius(power.levels))} radius`;
+    return `${alias} ${formatDistance(areaRadius(power.levels), units)} radius`;
   }
   const raises = power.attributes['AFFECTS_TOTAL'] === 'Yes'
     ? options.movementNote?.(power.xmlId)
@@ -725,10 +728,10 @@ function damageText(
     // becomes — `12" total`, or for Leaping a forward and an upward distance —
     // and its own levels as the amount it adds. Stretching raises nothing, so
     // it just says how far it reaches.
-    return `${alias} ${signed(power.levels)}"${raises.length > 0 ? ` (${raises})` : ''}`;
+    return `${alias} ${signed(power.levels)}${units}${raises.length > 0 ? ` (${raises})` : ''}`;
   }
   if (DISTANCE_POWERS.has(power.xmlId)) {
-    return `${alias} ${formatInches(power.levels)}`;
+    return `${alias} ${formatDistance(power.levels, units)}`;
   }
   if (power.xmlId === 'ENTANGLE') {
     // An Entangle is as hard to break out of as it is strong.
@@ -872,8 +875,8 @@ export function areaRadius(levels: number): number {
  * it, so the column adds up to what the sheet shows.
  */
 export function totalPowerCost(powers: readonly RenderedPower[]): number {
-  // A list heading prints no cost at all, so it contributes nothing.
-  return roundHalfUp(
-    powers.reduce((sum, power) => sum + (Number.parseFloat(power.cost) || 0), 0),
-  );
+  // Rounded once over exact costs, never by adding up the rounded ones the
+  // column shows: two powers that each cost 2 1/2 and print 3 add up to 5.
+  // A list heading costs nothing at all, and contributes nothing.
+  return roundHalfUp(powers.reduce((sum, power) => sum + power.real, 0));
 }

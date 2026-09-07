@@ -73,6 +73,8 @@ export * from './model/abilities.ts';
 export * from './model/powers.ts';
 export * from './model/points.ts';
 export * from './model/defenses.ts';
+export * from './model/size.ts';
+export * from './model/equipment.ts';
 
 export { buildSheet, type Sheet, type BuildSheetOptions } from './tags/sheet.ts';
 export { createContext, formatTimestamp, type ContextOptions } from './tags/context.ts';

@@ -1,6 +1,6 @@
 import type { Ability } from '../hdc/types.ts';
 import type { RuleNode, RuleSystem } from '../rules/types.ts';
-import { formatDice, formatFraction, formatInches, formatRoll, roundDown, roundHalfDown, roundHalfUp } from './numbers.ts';
+import { formatDice, formatDistance, formatFraction, formatRoll, roundDown, roundHalfDown, roundHalfUp } from './numbers.ts';
 
 /**
  * A characteristic as it appears on the sheet.
@@ -66,6 +66,27 @@ const EXACT_BASE = new Set(['SPD', 'LEAPING']);
 
 /** Characteristics that show a roll on the sheet. */
 const HAS_ROLL = new Set(['STR', 'DEX', 'CON', 'BODY', 'INT', 'EGO', 'PRE', 'COM']);
+/** Characteristics that rolled in fifth edition and stopped in sixth. */
+const HAS_ROLL_IN_FIFTH_ONLY = new Set(['BODY']);
+
+/**
+ * Which edition a character's rules are, told from the rules themselves: the
+ * mental combat values are characteristics of their own only in sixth edition,
+ * where fifth figures a single ECV from EGO.
+ */
+export function isSixthEdition(system: RuleSystem): boolean {
+  return system.sections.CHARACTERISTICS.entries.some((entry) => entry.id === 'OMCV');
+}
+
+/** Sixth edition measures the map in metres where fifth measures it in inches. */
+export function movementUnits(system: RuleSystem): string {
+  return isSixthEdition(system) ? 'm' : '"';
+}
+
+/** How far one point of endurance moves a character. */
+export function movementPerEnd(system: RuleSystem): number {
+  return isSixthEdition(system) ? 10 : 5;
+}
 
 /**
  * Every characteristic name either edition uses, in resolution order — a
@@ -154,7 +175,7 @@ export function buildCharacteristics(
       primary: value + added((entry) => entry.affectsPrimary),
       total: value + added((entry) => entry.affectsTotal),
       rawCost,
-      cost: roundHalfUp(rawCost),
+      cost: displayCost(rawCost),
       levels,
       notes: '',
     });
@@ -199,6 +220,16 @@ function leapingDistances(
     }
   }
   return { forward, upward };
+}
+
+/**
+ * What the Cost column shows. It is the exact cost rounded, except that
+ * anything actually paid for shows at least a point: a sixth-edition character
+ * who buys one END pays a fifth of a point and the sheet writes 1.
+ */
+function displayCost(rawCost: number): number {
+  const rounded = roundHalfUp(rawCost);
+  return rawCost > 0 ? Math.max(1, rounded) : rounded;
 }
 
 /** Characteristics the rules define, in dependency order. */
@@ -268,8 +299,23 @@ export interface NotesContext {
   readonly defences?: { readonly value: string; readonly resistant: string } | undefined;
   /** What Enhanced Perception adds to the PER roll, always on and in total. */
   readonly perception?: { readonly primary: number; readonly total: number } | undefined;
-  /** The endurance the powers that raise a movement characteristic cost. */
-  readonly movementEnd?: number | undefined;
+  /**
+   * The endurance the powers that raise a movement characteristic cost, counted
+   * twice: once over the powers that are always on, and once over all of them.
+   */
+  readonly movementEnd?: { readonly primary: number; readonly total: number } | undefined;
+}
+
+/**
+ * A figure the sheet writes twice when a character has two of it — what they
+ * have always, and what they have with everything switched on.
+ *
+ * The separator is not the same everywhere: the Roll column spaces its slash
+ * and a PRE Attack spaces its own, where the rest of the notes run the two
+ * halves together.
+ */
+function pair(primary: string, total: string, separator = '/'): string {
+  return primary === total ? primary : `${primary}${separator}${total}`;
 }
 
 export function characteristicNotes(
@@ -279,11 +325,19 @@ export function characteristicNotes(
   context: NotesContext = {},
 ): string {
   const defenses = context.defences;
-  const { id, total, value } = characteristic;
+  const { id, primary, total, value } = characteristic;
+  const strEnd = (amount: number) => Math.max(1, roundHalfDown(amount / 10));
   switch (id) {
     case 'STR':
-      return `HTH Damage ${formatDice(total)}  END [${Math.max(1, roundHalfDown(total / 10))}]`;
+      return `HTH Damage ${pair(formatDice(primary), formatDice(total))}` +
+        `  END [${pair(String(strEnd(primary)), String(strEnd(total)))}]`;
     case 'DEX': {
+      // DEX says what it figures. In sixth edition it figures nothing: OCV and
+      // DCV are characteristics bought in their own right, and the note is
+      // left empty.
+      if (set.byId.has('OCV')) {
+        return '';
+      }
       const ocv = combatValue(set, system, 'OCV');
       const dcv = combatValue(set, system, 'DCV');
       return ocv === undefined || dcv === undefined
@@ -291,20 +345,18 @@ export function characteristicNotes(
         : `OCV ${roundHalfUp(ocv)} DCV ${roundHalfUp(dcv)}`;
     }
     case 'INT': {
-      // Enhanced Perception sharpens the roll, and if it is not always on the
-      // sheet shows both figures: `PER Roll 13-/18-`.
-      const { primary = 0, total: sharpened = 0 } = context.perception ?? {};
-      const roll = formatRoll(total + primary * 5);
-      return sharpened === primary
-        ? `PER Roll ${roll}`
-        : `PER Roll ${roll}/${formatRoll(total + sharpened * 5)}`;
+      // Enhanced Perception sharpens the roll, and if either it or the INT it
+      // is added to is not always on, the sheet shows both figures:
+      // `PER Roll 13-/18-`.
+      const { primary: always = 0, total: sharpened = 0 } = context.perception ?? {};
+      return `PER Roll ${pair(formatRoll(primary + always * 5), formatRoll(total + sharpened * 5))}`;
     }
     case 'EGO': {
       const ecv = combatValue(set, system, 'ECV');
       return ecv === undefined ? '' : `ECV: ${roundHalfUp(ecv)}`;
     }
     case 'PRE':
-      return `PRE Attack: ${formatDice(total)}`;
+      return `PRE Attack: ${pair(formatDice(primary), formatDice(total), ' / ')}`;
     case 'PD':
     case 'ED':
       return defenses === undefined
@@ -312,19 +364,23 @@ export function characteristicNotes(
         : `${defenses.value} ${id} (${defenses.resistant} r${id})`;
     case 'SPD':
       // Two spaces after the colon, as everywhere else on the sheet.
-      return `Phases:  ${phases(total).join(', ')}`;
+      return `Phases:  ${pair(phases(primary).join(', '), phases(total).join(', '))}`;
     case 'LEAPING': {
       const { forward, upward } = characteristic.movement ?? { forward: 0, upward: 0 };
-      return `${formatInches(floorToHalf(forward))} forward, ${formatInches(floorToHalf(upward))} upward`;
+      const units = movementUnits(system);
+      return `${distance(forward, units)} forward, ${distance(upward, units)} upward`;
     }
     case 'RUNNING':
     case 'SWIMMING': {
-      // One point of END buys five inches of movement, so a character who has
-      // bought none of either spends none. A movement power that raises the
-      // characteristic charges its own endurance on top: Porcelain runs 10" of
-      // her own for 2 END and another 10" of slip for the power's 4.
-      const own = value > 0 ? Math.max(1, roundHalfDown(value / 5)) : 0;
-      return `END [${own + (context.movementEnd ?? 0)}]`;
+      // One point of END buys five inches of movement — ten metres in sixth
+      // edition, which is the same distance said differently — so a character
+      // who has bought none of either spends none. A movement power that raises
+      // the characteristic charges its own endurance on top: Porcelain runs 10"
+      // of her own for 2 END and another 10" of slip for the power's 4.
+      const per = movementPerEnd(system);
+      const own = value > 0 ? Math.max(1, roundHalfDown(value / per)) : 0;
+      const powers = context.movementEnd ?? { primary: 0, total: 0 };
+      return `END [${pair(String(own + powers.primary), String(own + powers.total))}]`;
     }
     default:
       return '';
@@ -363,12 +419,17 @@ export function characteristicBaseValue(characteristic: Characteristic): string 
     : String(characteristic.base);
 }
 
-export function characteristicDisplayValue(characteristic: Characteristic): string {
+export function characteristicDisplayValue(characteristic: Characteristic, units = '"'): string {
   if (characteristic.id === 'LEAPING') {
     const { forward, upward } = characteristic.movement ?? { forward: 0, upward: 0 };
-    return `${formatInches(floorToHalf(forward))}/${formatInches(floorToHalf(upward))}`;
+    return `${distance(forward, units)}/${distance(upward, units)}`;
   }
   return formatFraction(characteristic.primary);
+}
+
+/** Distances are shown in half units, rounded down: 3.6 reads `3 1/2"`. */
+function distance(value: number, units: string): string {
+  return formatDistance(floorToHalf(value), units);
 }
 
 /**
@@ -387,8 +448,8 @@ function floorToHalf(value: number): number {
   return Math.floor(Number(value.toFixed(9)) * 2) / 2;
 }
 
-export function hasRoll(id: string): boolean {
-  return HAS_ROLL.has(id);
+export function hasRoll(id: string, system: RuleSystem): boolean {
+  return HAS_ROLL.has(id) && !(HAS_ROLL_IN_FIFTH_ONLY.has(id) && isSixthEdition(system));
 }
 
 function number(value: string | undefined, fallback: number): number {

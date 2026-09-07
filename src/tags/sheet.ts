@@ -12,12 +12,17 @@ import {
   type RenderedAbility,
   type RenderedManeuver,
 } from '../model/abilities.ts';
-import { buildCharacteristics, characteristicNotes, type CharacteristicSet } from '../model/characteristics.ts';
+import {
+  buildCharacteristics,
+  characteristicNotes,
+  movementUnits,
+  type CharacteristicSet,
+} from '../model/characteristics.ts';
 import { characteristicBonuses, collectDefences, type Defences } from '../model/defenses.ts';
 import { buildPower, totalPowerCost, type RenderedPower } from '../model/powers.ts';
 import { summarisePoints, type PointsSummary } from '../model/points.ts';
 import { characterSize } from '../model/size.ts';
-import { formatInches, formatRoll, roundHalfUp } from '../model/numbers.ts';
+import { formatDistance, formatRoll, roundHalfUp } from '../model/numbers.ts';
 
 /**
  * Everything a template can ask about, worked out once before rendering starts.
@@ -120,9 +125,15 @@ export function buildSheet(
     if (characteristic === undefined) {
       return undefined;
     }
-    return id === 'LEAPING'
-      ? characteristicNotes(characteristic, characteristics, system)
-      : `${formatInches(characteristic.total)} total`;
+    if (id === 'LEAPING') {
+      return characteristicNotes(characteristic, characteristics, system);
+    }
+    // A power the character can be parted from prints what they move with it
+    // and without: `Running +5m (13m/18m total)`.
+    const units = movementUnits(system);
+    const always = formatDistance(characteristic.primary, units);
+    const all = formatDistance(characteristic.total, units);
+    return `${always === all ? all : `${always}/${all}`} total`;
   };
   const strength = characteristics.byId.get('STR')?.total ?? 0;
   const size = characterSize(character.info.height, character.info.weight);
@@ -133,6 +144,7 @@ export function buildSheet(
       movementNote,
       strength,
       size,
+      units: movementUnits(system),
       ego: characteristics.byId.get('EGO')?.total ?? 0,
       perceptionRoll: (levels) =>
         formatRoll((characteristics.byId.get('INT')?.total ?? 0) + levels * 5),
