@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from '../src/cli/render.ts';
 import { defaultRulesDirectory } from '../src/rules/load.ts';
+import { packageVersion } from '../src/util/version.ts';
 import { render, renderFiles, renderToFile } from '../src/render.ts';
 import { HeroError } from '../src/util/errors.ts';
 import { silentLogger } from '../src/util/logger.ts';
@@ -107,10 +108,26 @@ describe.skipIf(noRules)('the render command', () => {
     expect(stderr).not.toContain('<html');
   });
 
+  test('recognises --version, with no short form, since -v is --verbose', () => {
+    expect(parseArgs(['--version'])).toBe('version');
+    expect(parseArgs(['-v', 'a.hdc', 'b.hde'])).toMatchObject({ logLevel: 'debug' });
+  });
+
+  test('reports the version before it asks for any files', () => {
+    // --version must not trip the "please give a character file" check.
+    expect(parseArgs(['--version'])).toBe('version');
+  });
+
   test('prints the usage on request', async () => {
     const { code, stdout } = await run(['--help']);
     expect(code).toBe(0);
     expect(stdout).toContain('Usage: ork-hero-render <character.hdc> <template.hde> [output.html]');
+  });
+
+  test('prints its own version and stops', async () => {
+    const { code, stdout } = await run(['--version']);
+    expect(code).toBe(0);
+    expect(stdout.trim()).toBe(`ork-hero-render ${packageVersion()}`);
   });
 
   test.each([

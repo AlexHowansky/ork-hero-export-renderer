@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { isEntryPoint } from '../util/entrypoint.ts';
+import { packageVersion } from '../util/version.ts';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { HeroError } from '../util/errors.ts';
@@ -27,6 +28,7 @@ Options:
                         bulk, but dropping them is not reversible without a
                         re-run.
   -v, --verbose       Report each file as it is compiled
+      --version       Show the version of this extractor
   -h, --help          Show this message`;
 
 interface Options {
@@ -115,7 +117,7 @@ function countEntries(template: RuleTemplate): number {
   return Object.values(template.sections).reduce((total, section) => total + section.entries.length, 0);
 }
 
-export function parseArgs(argv: readonly string[]): Options | 'help' {
+export function parseArgs(argv: readonly string[]): Options | 'help' | 'version' {
   let jarPath: string | undefined;
   let outDir = 'rules';
   let dropHelpText = false;
@@ -127,6 +129,9 @@ export function parseArgs(argv: readonly string[]): Options | 'help' {
       case '-h':
       case '--help':
         return 'help';
+      // No short form: -v is already --verbose here.
+      case '--version':
+        return 'version';
       case '-v':
       case '--verbose':
         verbose = true;
@@ -162,7 +167,7 @@ export function parseArgs(argv: readonly string[]): Options | 'help' {
 }
 
 async function main(): Promise<void> {
-  let options: Options | 'help';
+  let options: Options | 'help' | 'version';
   try {
     options = parseArgs(process.argv.slice(2));
   } catch (error) {
@@ -173,6 +178,11 @@ async function main(): Promise<void> {
 
   if (options === 'help') {
     process.stdout.write(`${USAGE}\n`);
+    return;
+  }
+
+  if (options === 'version') {
+    process.stdout.write(`ork-hero-extract-rules ${packageVersion()}\n`);
     return;
   }
 

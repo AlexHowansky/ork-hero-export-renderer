@@ -110,6 +110,11 @@ describe('extract-rules CLI', () => {
     expect(parseArgs(['--help'])).toBe('help');
   });
 
+  test('recognises --version, and does not then demand a jar', () => {
+    expect(parseArgs(['--version'])).toBe('version');
+    expect(parseArgs(['--version', '--verbose'])).toBe('version');
+  });
+
   test.skipIf(noJar)('writes a manifest and one file per system, which then load and resolve', async () => {
     const out = await mkdtemp(join(tmpdir(), 'hero-rules-'));
     try {

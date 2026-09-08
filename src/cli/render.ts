@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { isEntryPoint } from '../util/entrypoint.ts';
+import { packageVersion } from '../util/version.ts';
 import { HeroError } from '../util/errors.ts';
 import { consoleLogger, type LogLevel } from '../util/logger.ts';
 import { renderFiles, renderToFile } from '../render.ts';
@@ -18,6 +19,7 @@ Options:
                       on, instead of stopping with an explanation
   -v, --verbose       Report progress on standard error
   -q, --quiet         Report nothing but failures
+      --version       Show the version of this renderer
   -h, --help          Show this message
 
 Directives the renderer does not recognise are copied through untouched in
@@ -32,7 +34,7 @@ export interface Options {
   logLevel: LogLevel;
 }
 
-export function parseArgs(argv: readonly string[]): Options | 'help' {
+export function parseArgs(argv: readonly string[]): Options | 'help' | 'version' {
   const positional: string[] = [];
   let rulesDirectory: string | undefined;
   let strict = true;
@@ -44,6 +46,9 @@ export function parseArgs(argv: readonly string[]): Options | 'help' {
       case '-h':
       case '--help':
         return 'help';
+      // No short form: -v is already --verbose here.
+      case '--version':
+        return 'version';
       case '-v':
       case '--verbose':
         logLevel = 'debug';
@@ -92,7 +97,7 @@ export function parseArgs(argv: readonly string[]): Options | 'help' {
 }
 
 async function main(): Promise<void> {
-  let options: Options | 'help';
+  let options: Options | 'help' | 'version';
   try {
     options = parseArgs(process.argv.slice(2));
   } catch (error) {
@@ -103,6 +108,11 @@ async function main(): Promise<void> {
 
   if (options === 'help') {
     process.stdout.write(`${USAGE}\n`);
+    return;
+  }
+
+  if (options === 'version') {
+    process.stdout.write(`ork-hero-render ${packageVersion()}\n`);
     return;
   }
 
