@@ -123,7 +123,8 @@ async function readManifest(directory: string, searched: readonly string[]): Pro
         searched.map((candidate) => `  ${candidate}`).join('\n') +
         '\n\nThe rules are compiled from HERO Designer\'s own data files, which are Hero Games\' ' +
         'copyright and so are not distributed with this package. Generate them with:\n' +
-        '  ork-hero-extract-rules <path to HD6.jar>\n' +
+        '  npx ork-hero-extract-rules <path to HD6.jar>\n' +
+        '(or "ork-hero-extract-rules" on its own, if you installed this globally)\n' +
         `Or point at an existing copy with --rules <dir>, or the ${RULES_ENV_VAR} environment variable.`,
       // No `source`: the message already names every path tried, and appending
       // just one of them reads as though that were the only place we looked.

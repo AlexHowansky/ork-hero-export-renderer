@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from '../src/cli/render.ts';
-import { defaultRulesDirectory } from '../src/rules/load.ts';
+import { RulesLibrary, defaultRulesDirectory } from '../src/rules/load.ts';
 import { packageVersion } from '../src/util/version.ts';
 import { render, renderFiles, renderToFile } from '../src/render.ts';
 import { HeroError } from '../src/util/errors.ts';
@@ -177,6 +177,23 @@ describe.skipIf(noRules)('the library entry points', () => {
     expect(html).toContain('content="20260405"');
     // The time is the file's own, rendered in whatever zone this runs in.
     expect(html).toMatch(/content="\w{3}, \d{1,2} \w{3} 2026 \d{2}:\d{2}:\d{2}"/);
+  });
+
+  test('renders against a library passed in, without touching the rules directory', async () => {
+    const library = await RulesLibrary.load();
+    // A directory that does not exist: proof the passed-in library was used.
+    const html = await renderFiles(CHARACTER, TEMPLATE, {
+      library,
+      rulesDirectory: join(tmpdir(), 'ork-no-such-rules-dir'),
+    });
+    expect(html).toBe(await renderFiles(CHARACTER, TEMPLATE));
+  });
+
+  test('a library is reusable across renders', async () => {
+    const library = await RulesLibrary.load();
+    const first = await renderFiles(CHARACTER, TEMPLATE, { library });
+    const second = await renderFiles(CHARACTER, TEMPLATE, { library });
+    expect(second).toBe(first);
   });
 
   test('renderToFile writes what renderFiles returns', async () => {

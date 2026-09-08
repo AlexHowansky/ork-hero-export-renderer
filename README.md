@@ -29,14 +29,14 @@ distributed here, and it is a one-time step -- see [Game rules
 data](#game-rules-data) for the detail:
 
 ```sh
-ork-hero-extract-rules /path/to/HD6.jar   # writes ./rules, once
+npx ork-hero-extract-rules /path/to/HD6.jar   # writes ./rules, once
 ```
 
 Then:
 
 ```sh
-ork-hero-render Redshift.hdc Ork-16x9.hde sheet.html   # write a file
-ork-hero-render Redshift.hdc Ork-16x9.hde              # or print it
+npx ork-hero-render Redshift.hdc Ork-16x9.hde sheet.html   # write a file
+npx ork-hero-render Redshift.hdc Ork-16x9.hde              # or print it
 ```
 
 Progress goes to standard error, so piping the sheet somewhere stays clean.
@@ -49,6 +49,23 @@ import { renderFiles } from 'ork-hero-export-renderer';
 
 const html = await renderFiles('Redshift.hdc', 'Ork-16x9.hde');
 ```
+
+That call reads and parses the whole rules directory each time, which is about
+half the cost of a render. Anywhere that renders more than once, load the rules
+once and hand them over:
+
+```ts
+import { RulesLibrary, renderFiles } from 'ork-hero-export-renderer';
+
+const library = await RulesLibrary.load(rulesDirectory);   // once, at start-up
+const html = await renderFiles('Redshift.hdc', 'Ork-16x9.hde', { library });
+```
+
+Where the rules are found is described under [Game rules
+data](#game-rules-data). Note that the `rules` default is relative to the
+process's working directory, not to your module, so an application that does not
+start in its own project root should pass an absolute `rulesDirectory` or set
+`ORK_HERO_RULES`.
 
 The sheet's `CHARACTER_SAVE_TIMESTAMP` is the character file's own modification
 time written in **local** time, as HERO Designer writes it, so reproducing a
@@ -65,6 +82,17 @@ as `*.hdt` files inside its program jar.
 Compile them into the JSON this project reads:
 
 ```sh
+npx ork-hero-extract-rules /path/to/HD6.jar
+```
+
+`npx` is what reaches the command when this package is a dependency of your
+project: npm puts it in `node_modules/.bin`, which is not on your shell's PATH.
+The same goes for `ork-hero-render`. Inside your own `package.json` scripts both
+names work directly, since npm puts that directory on PATH there. If you would
+rather have them as ordinary commands, install globally instead:
+
+```sh
+npm install -g ork-hero-export-renderer
 ork-hero-extract-rules /path/to/HD6.jar
 ```
 

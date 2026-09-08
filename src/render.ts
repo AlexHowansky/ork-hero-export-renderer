@@ -26,8 +26,26 @@ export interface RenderOptions {
    */
   readonly strict?: boolean;
   readonly logger?: Logger;
-  /** Where the compiled rules live. Defaults to the bundled data. */
+  /**
+   * Where the compiled rules live. Nothing is shipped with this package: by
+   * default the ORK_HERO_RULES environment variable is tried, then `rules` in
+   * the working directory, then a directory alongside the package itself.
+   *
+   * Note that the working directory is the process's, not your module's, so an
+   * application whose start-up directory is not its project root should give an
+   * absolute path here or set the environment variable.
+   */
   readonly rulesDirectory?: string;
+  /**
+   * Rules already in memory, to render against directly.
+   *
+   * Every call otherwise reads and parses the whole rules directory, a few
+   * megabytes of JSON, which roughly doubles the cost of a render. Somewhere
+   * that renders more than once -- a server, a batch job -- should load the
+   * library once at start-up and pass it here. Takes precedence over
+   * `rulesDirectory`.
+   */
+  readonly library?: RulesLibrary;
   /** Shown by `<!--CHARACTER_FILE-->`. */
   readonly characterFileName?: string;
   /** Shown by `<!--CHARACTER_SAVE_TIMESTAMP-->`. */
@@ -42,7 +60,8 @@ export async function render(
   templateSource: string,
   options: RenderOptions = {},
 ): Promise<string> {
-  const library = await RulesLibrary.load(options.rulesDirectory, options.logger ?? silentLogger);
+  const library =
+    options.library ?? (await RulesLibrary.load(options.rulesDirectory, options.logger ?? silentLogger));
   const character = parseCharacterFile(characterFile, options.characterFileName);
   const system = library.system(character.templateId);
   const template = parseTemplate(templateSource);
