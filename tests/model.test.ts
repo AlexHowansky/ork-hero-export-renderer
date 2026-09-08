@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { RulesLibrary } from '../src/rules/load.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { RulesLibrary, defaultRulesDirectory } from '../src/rules/load.ts';
 import { parseCharacterFile } from '../src/hdc/parse.ts';
 import type { CharacterFile } from '../src/hdc/types.ts';
 import type { RuleSystem } from '../src/rules/types.ts';
@@ -37,7 +38,16 @@ let system: RuleSystem;
 let character: CharacterFile;
 let characteristics: CharacteristicSet;
 
+// The extracted rules are compiled from HERO Designer's own data files, which
+// are Hero Games' copyright and so are not in the repository. Run
+// "ork-hero-extract-rules <path to HD6.jar>" and these run; without it they
+// skip, and everything that needs no rules data still runs.
+const noRules = !existsSync(join(defaultRulesDirectory(), 'manifest.json'));
+
 beforeAll(async () => {
+  if (noRules) {
+    return;
+  }
   system = (await RulesLibrary.load()).system('Superheroic');
   character = parseCharacterFile(readFileSync('fixtures/Redshift.hdc'), 'Redshift.hdc');
   // Combat Luck grants 6 resistant PD and ED, and is always on.
@@ -80,7 +90,7 @@ describe('number formatting', () => {
   });
 });
 
-describe('characteristics', () => {
+describe.skipIf(noRules)('characteristics', () => {
   // Value, base, cost and notes for every row of the exported sheet.
   const expected: Record<string, [string, string, number, string]> = {
     STR: ['18', '10', 8, 'HTH Damage 3 1/2d6  END [2]'],
@@ -149,7 +159,7 @@ describe('characteristics', () => {
   });
 });
 
-describe('skills', () => {
+describe.skipIf(noRules)('skills', () => {
   test('reproduces all 29 rows and the total', () => {
     const expected: [string, string, number][] = [
       ['14-', 'Acting', 5], ['14-', 'Acrobatics', 3], ['14-', 'Breakfall', 3],
@@ -176,7 +186,7 @@ describe('skills', () => {
   });
 });
 
-describe('talents', () => {
+describe.skipIf(noRules)('talents', () => {
   test('prices talents from the rules, per level', () => {
     const built = character.talents.map((t) => buildSimple(t, system, ruleFor(system, 'TALENTS', t.xmlId)));
     expect(built.map((t) => [t.text, t.cost])).toEqual([
@@ -187,7 +197,7 @@ describe('talents', () => {
   });
 });
 
-describe('disadvantages', () => {
+describe.skipIf(noRules)('disadvantages', () => {
   test('reproduces all 13 rows and the total', () => {
     const expected: [string, number][] = [
       ["Distinctive Features:  doesn't age (Easily Concealed; Noticed and Recognizable; Detectable By Commonly-Used Senses)", 5],
@@ -221,7 +231,7 @@ describe('disadvantages', () => {
   });
 });
 
-describe('martial maneuvers', () => {
+describe.skipIf(noRules)('martial maneuvers', () => {
   test('reads the columns from the character file', () => {
     const built = character.martialArts.map((m) => buildManeuver(m, 18));
     expect(built.map((m) => [m.name, m.phase, m.ocv, m.dcv, m.cost])).toEqual([
@@ -233,7 +243,7 @@ describe('martial maneuvers', () => {
   });
 });
 
-describe('modifiers', () => {
+describe.skipIf(noRules)('modifiers', () => {
   test('lists modifiers cheapest first, keeping file order within a tie', () => {
     const power = character.powers.find((p) => p.xmlId === 'CHANGEENVIRONMENT')!;
     expect(sortedModifiers(power.modifiers, system).map((m) => m.xmlId)).toEqual([
@@ -261,7 +271,7 @@ describe('modifiers', () => {
   });
 });
 
-describe('powers', () => {
+describe.skipIf(noRules)('powers', () => {
   test('describes and prices every power on the sheet', () => {
     // Built through the sheet, because a slot is priced by the framework it
     // sits in and only the sheet knows which that is.
@@ -307,7 +317,7 @@ describe('powers', () => {
   });
 });
 
-describe('points', () => {
+describe.skipIf(noRules)('points', () => {
   test('works out experience from what has been spent', () => {
     const summary = summarisePoints({
       basePoints: 250,

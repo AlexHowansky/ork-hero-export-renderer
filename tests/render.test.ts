@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { RulesLibrary } from '../src/rules/load.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { RulesLibrary, defaultRulesDirectory } from '../src/rules/load.ts';
 import { parseCharacterFile } from '../src/hdc/parse.ts';
 import { parseTemplate } from '../src/template/parser.ts';
 import { renderTemplate } from '../src/template/renderer.ts';
@@ -47,7 +48,24 @@ const of = (name: string): Rendering => renderings.get(name) as Rendering;
 let sheet: Sheet;
 let rendered: string;
 
+
+// The extracted rules are compiled from HERO Designer's own data files, which
+// are Hero Games' copyright and so are not in the repository. Run
+// "ork-hero-extract-rules <path to HD6.jar>" and these run; without it they
+// skip, and everything that needs no rules data still runs.
+const noRules = !existsSync(join(defaultRulesDirectory(), 'manifest.json'));
+
+if (noRules) {
+  console.warn(
+    'Skipping the tests that need extracted rules data: none found. ' +
+      'Run "ork-hero-extract-rules <path to HD6.jar>" to generate it.',
+  );
+}
+
 beforeAll(async () => {
+  if (noRules) {
+    return;
+  }
   const library = await RulesLibrary.load();
   const template = parseTemplate(readFileSync('fixtures/Ork-16x9.hde', 'utf8'), {
     source: 'Ork-16x9.hde',
@@ -80,7 +98,7 @@ beforeAll(async () => {
 
 // The acceptance gate: pure TypeScript reproducing HERO Designer's own export
 // of each character, to the byte.
-describe.each(CHARACTERS.map((entry) => entry.name))('rendering %s', (name) => {
+describe.skipIf(noRules).each(CHARACTERS.map((entry) => entry.name))('rendering %s', (name) => {
   test('produces the same number of lines as the exported sheet', () => {
     const { rendered: ours, expected: theirs } = of(name);
     expect(ours.split('\n')).toHaveLength(theirs.split('\n').length);
@@ -99,7 +117,7 @@ describe.each(CHARACTERS.map((entry) => entry.name))('rendering %s', (name) => {
   });
 });
 
-describe('rendering the reference character', () => {
+describe.skipIf(noRules)('rendering the reference character', () => {
   test('embeds the character portrait byte for byte', () => {
     const hex = Buffer.from(sheet.character.image?.base64 ?? '', 'base64').toString('hex');
     expect(rendered).toContain(`const imageHex = '${hex}'`);
@@ -150,7 +168,7 @@ describe('rendering the reference character', () => {
   });
 });
 
-describe('The Bismarck, an Elemental Control character', () => {
+describe.skipIf(noRules)('The Bismarck, an Elemental Control character', () => {
   const bismarck = () => of('The Bismarck');
 
   test('fills in the document header', () => {
@@ -246,7 +264,7 @@ describe('The Bismarck, an Elemental Control character', () => {
   });
 });
 
-describe('Azarra, whose powers live in a suit', () => {
+describe.skipIf(noRules)('Azarra, whose powers live in a suit', () => {
   const azarra = () => of('Azarra');
 
   test('fills in the document header', () => {
@@ -396,7 +414,7 @@ describe('Azarra, whose powers live in a suit', () => {
   });
 });
 
-describe('Porcelain, who changes size', () => {
+describe.skipIf(noRules)('Porcelain, who changes size', () => {
   const porcelain = () => of('Porcelain');
 
   test('fills in the document header', () => {
@@ -517,7 +535,7 @@ describe('Porcelain, who changes size', () => {
   });
 });
 
-describe('Six, a sixth-edition character with equipment', () => {
+describe.skipIf(noRules)('Six, a sixth-edition character with equipment', () => {
   const six = () => of('Six');
 
   test('fills in the document header', () => {
@@ -662,7 +680,7 @@ describe('Six, a sixth-edition character with equipment', () => {
   });
 });
 
-describe('point totals on the sheet', () => {
+describe.skipIf(noRules)('point totals on the sheet', () => {
   test('reports each section', () => {
     expect(sheet.characteristics.totalCost).toBe(168);
     expect(sheet.points.basePoints).toBe(250);

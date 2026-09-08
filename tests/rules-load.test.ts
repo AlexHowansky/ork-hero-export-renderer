@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -90,8 +90,11 @@ describe('missing rules data', () => {
   // A directory reached through the search order still loads: this checkout
   // keeps its extracted rules where `extract-rules` put them, same as a
   // consumer's project would.
-  test('finds rules through the search order when given no directory', async () => {
-    process.env[RULES_ENV_VAR] = mkdtempSync(join(tmpdir(), 'ork-empty-'));
-    expect((await RulesLibrary.load()).systemIds.length).toBeGreaterThan(0);
-  });
+  test.skipIf(!existsSync(join(defaultRulesDirectory(), 'manifest.json')))(
+    'finds rules through the search order when given no directory',
+    async () => {
+      process.env[RULES_ENV_VAR] = mkdtempSync(join(tmpdir(), 'ork-empty-'));
+      expect((await RulesLibrary.load()).systemIds.length).toBeGreaterThan(0);
+    },
+  );
 });

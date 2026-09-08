@@ -1,11 +1,26 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from '../src/cli/render.ts';
+import { defaultRulesDirectory } from '../src/rules/load.ts';
 import { render, renderFiles, renderToFile } from '../src/render.ts';
 import { HeroError } from '../src/util/errors.ts';
 import { silentLogger } from '../src/util/logger.ts';
+
+// The extracted rules are compiled from HERO Designer's own data files, which
+// are Hero Games' copyright and so are not in the repository. Run
+// "ork-hero-extract-rules <path to HD6.jar>" and these run; without it they
+// skip, and everything that needs no rules data still runs.
+const noRules = !existsSync(join(defaultRulesDirectory(), 'manifest.json'));
+
+if (noRules) {
+  console.warn(
+    'Skipping the tests that need extracted rules data: none found. ' +
+      'Run "ork-hero-extract-rules <path to HD6.jar>" to generate it.',
+  );
+}
 
 const CHARACTER = 'fixtures/Redshift.hdc';
 const TEMPLATE = 'fixtures/Ork-16x9.hde';
@@ -60,7 +75,7 @@ describe('parseArgs', () => {
   });
 });
 
-describe('the render command', () => {
+describe.skipIf(noRules)('the render command', () => {
   let expected = '';
   beforeAll(async () => {
     expected = await readFile('fixtures/Redshift.HTML', 'utf8');
@@ -123,7 +138,7 @@ describe('the render command', () => {
   });
 });
 
-describe('the library entry points', () => {
+describe.skipIf(noRules)('the library entry points', () => {
   test('render works from content already in memory', async () => {
     const html = await render(
       await readFile(CHARACTER),
