@@ -24,8 +24,8 @@ still an inference from the fixtures is commented where it lives.
 ## Rendering a sheet
 
 ```sh
-render Redshift.hdc Ork-16x9.hde sheet.html   # write a file
-render Redshift.hdc Ork-16x9.hde              # or print it
+ork-hero-render Redshift.hdc Ork-16x9.hde sheet.html   # write a file
+ork-hero-render Redshift.hdc Ork-16x9.hde              # or print it
 ```
 
 Progress goes to standard error, so piping the sheet somewhere stays clean.
@@ -54,7 +54,7 @@ as `*.hdt` files inside its program jar.
 Compile them into the JSON this project reads:
 
 ```sh
-extract-rules /path/to/HD6.jar
+ork-hero-extract-rules /path/to/HD6.jar
 ```
 
 This writes `rules/manifest.json` plus one file per game system. Re-run it after
@@ -186,8 +186,9 @@ bun run typecheck
 bun run build      # emit dist/ for Node
 ```
 
-The package targets Bun and runs equally on Node 20 or later. `bun run build`
-emits ESM with type declarations; CommonJS is not produced.
+The package targets Bun and runs equally on Node 22.12 or later. `bun run build`
+emits ESM with type declarations; CommonJS is not produced, though `require()`
+reaches the ESM build on Node 22.12+.
 
 ### The HERO Designer jar
 

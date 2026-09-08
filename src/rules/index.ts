@@ -4,7 +4,7 @@
  *
  * `load.ts` and `jar.ts` are deliberately absent. They read the filesystem and
  * unzip a jar, which is build-time work; including them here would defeat the
- * purpose of this entry point. Compile the rules with the `extract-rules` CLI,
+ * purpose of this entry point. Compile the rules with the `ork-hero-extract-rules` CLI,
  * then hand the resulting JSON to `resolveSystem`.
  */
 

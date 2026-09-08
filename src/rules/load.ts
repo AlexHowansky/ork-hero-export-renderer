@@ -8,7 +8,7 @@ import { RULES_FORMAT_VERSION, type RuleSystem, type RuleTemplate, type RulesMan
 
 /**
  * Default location of the extracted data, relative to this file. The rules are
- * not shipped with the package; `extract-rules` writes them here.
+ * not shipped with the package; `ork-hero-extract-rules` writes them here.
  */
 export function defaultRulesDirectory(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), '../../rules');
@@ -85,7 +85,7 @@ async function readManifest(directory: string): Promise<RulesManifest> {
   } catch (cause) {
     throw new RulesError(
       `Could not read the game rules data at ${path}. ` +
-        'Run "extract-rules <path to HD6.jar>" to generate it.',
+        'Run "ork-hero-extract-rules <path to HD6.jar>" to generate it.',
       { source: path, cause },
     );
   }
@@ -93,7 +93,7 @@ async function readManifest(directory: string): Promise<RulesManifest> {
   if (manifest.formatVersion !== RULES_FORMAT_VERSION) {
     throw new RulesError(
       `The rules data is in format version ${manifest.formatVersion}, but this version of the renderer ` +
-        `reads version ${RULES_FORMAT_VERSION}. Re-run "extract-rules" to regenerate it.`,
+        `reads version ${RULES_FORMAT_VERSION}. Re-run "ork-hero-extract-rules" to regenerate it.`,
       { source: path },
     );
   }

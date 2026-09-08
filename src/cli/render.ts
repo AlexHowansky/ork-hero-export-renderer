@@ -4,7 +4,7 @@ import { HeroError } from '../util/errors.ts';
 import { consoleLogger, type LogLevel } from '../util/logger.ts';
 import { renderFiles, renderToFile } from '../render.ts';
 
-const USAGE = `Usage: render <character.hdc> <template.hde> [output.html]
+const USAGE = `Usage: ork-hero-render <character.hdc> <template.hde> [output.html]
 
 Applies a HERO Designer export template to a character file and writes the
 resulting character sheet. With no output file, the sheet goes to standard
@@ -77,7 +77,7 @@ export function parseArgs(argv: readonly string[]): Options | 'help' {
   if (characterPath === undefined || templatePath === undefined) {
     throw new HeroError(
       'Please give a character file and an export template, for example: ' +
-        'render Redshift.hdc Ork-16x9.hde',
+        'ork-hero-render Redshift.hdc Ork-16x9.hde',
     );
   }
   if (extra.length > 0) {

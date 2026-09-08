@@ -17,7 +17,7 @@
     "./dist/cli/*.js"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "packageManager": "bun@1.4.2",
   "main": "./dist/index.js",
@@ -50,8 +50,8 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "render": "./dist/cli/render.js",
-    "extract-rules": "./dist/cli/extract-rules.js"
+    "ork-hero-render": "./dist/cli/render.js",
+    "ork-hero-extract-rules": "./dist/cli/extract-rules.js"
   },
   "files": [
     "dist",
@@ -59,15 +59,17 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli/render.js dist/cli/extract-rules.js",
-    "pack:check": "bun run build && bun pm pack --dry-run",
+    "pack:check": "bun pm pack --dry-run",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "extract-rules": "bun run src/cli/extract-rules.ts",
     "render": "bun run src/cli/render.ts",
-    "prepublishOnly": "bun run typecheck && bun run build && bun test"
+    "prepack": "bun run build",
+    "prepublishOnly": "bun run typecheck && bun test"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
+    "@types/node": "^22",
     "typescript": "^5.9.3"
   },
   "keywords": [

@@ -95,7 +95,7 @@ describe('the render command', () => {
   test('prints the usage on request', async () => {
     const { code, stdout } = await run(['--help']);
     expect(code).toBe(0);
-    expect(stdout).toContain('Usage: render <character.hdc> <template.hde> [output.html]');
+    expect(stdout).toContain('Usage: ork-hero-render <character.hdc> <template.hde> [output.html]');
   });
 
   test.each([
