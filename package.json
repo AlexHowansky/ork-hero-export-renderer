@@ -1,6 +1,6 @@
 {
   "name": "ork-hero-export-renderer",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "Render HERO System character sheets by applying a HERO Designer export template (.hde) to a character file (.hdc).",
   "license": "MIT",
   "author": "Alex Howansky",
