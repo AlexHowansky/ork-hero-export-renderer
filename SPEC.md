@@ -31,9 +31,11 @@ output should be written to a file, printed to stdout, or generated as a string.
 * `@fixtures/HD6.jar` contains the compiled version of the `HERO Designer` app.
   You may be able to use it to extract any needed information.
 
-* See `@fixtures/HDDocs.pdf` for the `HERO Designer` app documentation. The
-  section titled `EXPORT FORMATS` contains a description of the mechanism used
-  to apply an export template to a character file.
+* The `HERO Designer` app documentation ships with the app as `HDDocs.pdf`. Its
+  section titled `EXPORT FORMATS` describes the mechanism used to apply an
+  export template to a character file. The PDF is Hero Games' copyrighted
+  material, so it is not in this repository; if you have a copy at
+  `@fixtures/HDDocs.pdf`, that path is gitignored and left alone.
 
 ### Export Templates
 

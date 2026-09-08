@@ -3,3 +3,8 @@ node_modules/
 rules/
 *.tgz
 *.tsbuildinfo
+
+# HERO Designer's own program jar and manual: Hero Games' copyrighted material,
+# not ours to redistribute. See README "Running the tests".
+fixtures/HD6.jar
+fixtures/HDDocs.pdf

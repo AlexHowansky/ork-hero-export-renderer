@@ -181,10 +181,29 @@ construct or repeat a group that already repeats.
 
 ```sh
 bun install
-bun test           # 178 tests, including the byte-for-byte comparison
+bun test           # 226 tests, including the byte-for-byte comparison
 bun run typecheck
 bun run build      # emit dist/ for Node
 ```
 
 The package targets Bun and runs equally on Node 20 or later. `bun run build`
 emits ESM with type declarations; CommonJS is not produced.
+
+### The HERO Designer jar
+
+For the same reason the rules data is not distributed, HERO Designer's program
+jar is not in this repository: it is Hero Games' software, not ours to
+redistribute. It ships with HERO Designer, as `HD6.jar` in the directory the
+installer puts the program in.
+
+Seven tests in `tests/extract-rules.test.ts` compile the real `*.hdt` files and
+need it. They look for it at `fixtures/HD6.jar`, or wherever
+`HERO_DESIGNER_JAR` points:
+
+```sh
+HERO_DESIGNER_JAR=/path/to/HD6.jar bun test
+```
+
+Copying or symlinking your own copy into `fixtures/` works too; that path is
+gitignored. Without the jar those seven tests skip, with a note saying why, and
+the rest of the suite still runs.
