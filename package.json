@@ -13,9 +13,13 @@
   },
   "homepage": "https://github.com/AlexHowansky/ork-hero-export-renderer#readme",
   "type": "module",
+  "sideEffects": [
+    "./dist/cli/*.js"
+  ],
   "engines": {
     "node": ">=20"
   },
+  "packageManager": "bun@1.4.2",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -42,7 +46,8 @@
     "./util": {
       "types": "./dist/util/index.d.ts",
       "default": "./dist/util/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "bin": {
     "render": "./dist/cli/render.js",
@@ -62,7 +67,7 @@
     "prepublishOnly": "bun run typecheck && bun run build && bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.4.2",
     "typescript": "^5.9.3"
   },
   "keywords": [
