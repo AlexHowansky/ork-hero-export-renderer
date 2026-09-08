@@ -1,6 +1,8 @@
 dist/
 node_modules/
-rules/
+# Anchored: this is the generated rules data at the repository root.
+# Unanchored it would also swallow src/rules/, which is source.
+/rules/
 *.tgz
 *.tsbuildinfo
 

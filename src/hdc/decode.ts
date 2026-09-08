@@ -21,7 +21,7 @@ export interface DecodeResult {
 
 export function decodeCharacterFile(bytes: Uint8Array, source?: string): DecodeResult {
   const detected = detectEncoding(bytes, source);
-  return { ...detected, text: decode(bytes, detected.encoding, detected.fromByteOrderMark) };
+  return { ...detected, text: decode(bytes, detected.encoding) };
 }
 
 function detectEncoding(
@@ -55,24 +55,27 @@ function detectEncoding(
   return { encoding: 'utf-8', fromByteOrderMark: false };
 }
 
-function decode(bytes: Uint8Array, encoding: DetectedEncoding, hasMark: boolean): string {
+function decode(bytes: Uint8Array, encoding: DetectedEncoding): string {
   switch (encoding) {
     case 'utf-8':
-      return Buffer.from(bytes).toString('utf8').slice(hasMark ? 1 : 0);
+      return decodeWith('utf-8', bytes);
     case 'utf-16le':
-      return decodeUtf16(bytes, false, hasMark);
+      return decodeWith('utf-16le', bytes);
     case 'utf-16be':
-      return decodeUtf16(bytes, true, hasMark);
+      return decodeWith('utf-16be', bytes);
   }
 }
 
 /**
- * Node and Bun decode UTF-16 little endian but not big endian, so big-endian
- * input is byte-swapped first. `swap16` needs an even length and its own copy,
- * since the caller's bytes may be a view onto a larger buffer.
+ * Decodes with the platform's own decoder.
+ *
+ * `TextDecoder` is a web standard present in Node and in browsers, and it
+ * understands `utf-16be` directly — so the byte swap this used to do by hand is
+ * unnecessary, and it removes a leading byte-order mark itself, whatever the
+ * encoding. An odd trailing byte is dropped rather than decoded, since the
+ * caller's bytes may be a view onto a larger buffer.
  */
-function decodeUtf16(bytes: Uint8Array, bigEndian: boolean, hasMark: boolean): string {
-  const usable = bytes.length - (bytes.length % 2);
-  const buffer = Buffer.from(bytes.subarray(0, usable));
-  return (bigEndian ? buffer.swap16() : buffer).toString('utf16le').slice(hasMark ? 1 : 0);
+function decodeWith(encoding: DetectedEncoding, bytes: Uint8Array): string {
+  const usable = encoding === 'utf-8' ? bytes.length : bytes.length - (bytes.length % 2);
+  return new TextDecoder(encoding).decode(bytes.subarray(0, usable));
 }

@@ -22,6 +22,26 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./model": {
+      "types": "./dist/model/index.d.ts",
+      "default": "./dist/model/index.js"
+    },
+    "./hdc": {
+      "types": "./dist/hdc/index.d.ts",
+      "default": "./dist/hdc/index.js"
+    },
+    "./rules": {
+      "types": "./dist/rules/index.d.ts",
+      "default": "./dist/rules/index.js"
+    },
+    "./xml": {
+      "types": "./dist/xml/parse.d.ts",
+      "default": "./dist/xml/parse.js"
+    },
+    "./util": {
+      "types": "./dist/util/index.d.ts",
+      "default": "./dist/util/index.js"
     }
   },
   "bin": {
