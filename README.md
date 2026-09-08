@@ -23,6 +23,17 @@ still an inference from the fixtures is commented where it lives.
 
 ## Rendering a sheet
 
+First time through, you need the game rules data. It is compiled out of HERO
+Designer's own program jar, which is Hero Games' copyright and so is not
+distributed here, and it is a one-time step -- see [Game rules
+data](#game-rules-data) for the detail:
+
+```sh
+ork-hero-extract-rules /path/to/HD6.jar   # writes ./rules, once
+```
+
+Then:
+
 ```sh
 ork-hero-render Redshift.hdc Ork-16x9.hde sheet.html   # write a file
 ork-hero-render Redshift.hdc Ork-16x9.hde              # or print it
@@ -58,7 +69,13 @@ ork-hero-extract-rules /path/to/HD6.jar
 ```
 
 This writes `rules/manifest.json` plus one file per game system. Re-run it after
-installing a new build of HERO Designer. `--drop-help-text` omits the rule
+installing a new build of HERO Designer.
+
+The renderer looks for that data in the `ORK_HERO_RULES` environment variable,
+then `./rules`, then the directory alongside the installed package, and takes
+the first that has it. `--rules <dir>` overrides all three. Keeping the rules in
+your own project rather than inside `node_modules` is deliberate: a reinstall
+would wipe them. `--drop-help-text` omits the rule
 descriptions and examples, which only HERO Designer's own help panes use; it
 saves about 13% and is rarely worth it.
 

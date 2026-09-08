@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,12 +7,46 @@ import { silentLogger, type Logger } from '../util/logger.ts';
 import { resolveSystem } from './merge.ts';
 import { RULES_FORMAT_VERSION, type RuleSystem, type RuleTemplate, type RulesManifest } from './types.ts';
 
+/** Environment variable holding a rules directory, for CI and containers. */
+export const RULES_ENV_VAR = 'ORK_HERO_RULES';
+
 /**
- * Default location of the extracted data, relative to this file. The rules are
- * not shipped with the package; `ork-hero-extract-rules` writes them here.
+ * Where the package itself sits. Correct when working in this repository, where
+ * the checkout root is both the package root and the working directory, but not
+ * when installed: that path lands inside `node_modules`, which a reinstall
+ * wipes and some setups mount read-only.
+ */
+function packageRulesDirectory(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), '../../rules');
+}
+
+/**
+ * Every directory the renderer will try, in order, when no explicit one is
+ * given. `ork-hero-extract-rules` writes to `./rules` by default, so the
+ * working directory has to be on this list or following the instructions in the
+ * error below would not actually fix anything.
+ */
+export function rulesDirectoryCandidates(): string[] {
+  const candidates: string[] = [];
+  const fromEnvironment = process.env[RULES_ENV_VAR];
+  if (fromEnvironment !== undefined && fromEnvironment !== '') {
+    candidates.push(resolve(fromEnvironment));
+  }
+  candidates.push(resolve('rules'), packageRulesDirectory());
+  // In this repository the last two are the same directory; say it once.
+  return [...new Set(candidates)];
+}
+
+/**
+ * The first candidate that holds extracted rules, or the package's own
+ * directory when there are none, so the error names a stable path.
  */
 export function defaultRulesDirectory(): string {
-  return resolve(dirname(fileURLToPath(import.meta.url)), '../../rules');
+  return rulesDirectoryCandidates().find(holdsRules) ?? packageRulesDirectory();
+}
+
+function holdsRules(directory: string): boolean {
+  return existsSync(join(directory, 'manifest.json'));
 }
 
 /**
@@ -30,14 +65,14 @@ export class RulesLibrary {
     private readonly logger: Logger,
   ) {}
 
-  static async load(
-    directory: string = defaultRulesDirectory(),
-    logger: Logger = silentLogger,
-  ): Promise<RulesLibrary> {
-    const manifest = await readManifest(directory);
+  static async load(directory?: string, logger: Logger = silentLogger): Promise<RulesLibrary> {
+    // Which places to name in the error: the one asked for, or all we tried.
+    const searched = directory === undefined ? rulesDirectoryCandidates() : [resolve(directory)];
+    const resolvedDirectory = directory === undefined ? defaultRulesDirectory() : resolve(directory);
+    const manifest = await readManifest(resolvedDirectory, searched);
     const templates = new Map<string, RuleTemplate>();
     for (const entry of manifest.templates) {
-      const path = join(directory, `${entry.id}.json`);
+      const path = join(resolvedDirectory, `${entry.id}.json`);
       const template = JSON.parse(await readFile(path, 'utf8')) as RuleTemplate;
       if (template.formatVersion !== RULES_FORMAT_VERSION) {
         throw new RulesError(
@@ -77,16 +112,22 @@ export class RulesLibrary {
   }
 }
 
-async function readManifest(directory: string): Promise<RulesManifest> {
+async function readManifest(directory: string, searched: readonly string[]): Promise<RulesManifest> {
   const path = join(directory, 'manifest.json');
   let raw: string;
   try {
     raw = await readFile(path, 'utf8');
   } catch (cause) {
     throw new RulesError(
-      `Could not read the game rules data at ${path}. ` +
-        'Run "ork-hero-extract-rules <path to HD6.jar>" to generate it.',
-      { source: path, cause },
+      'Could not find the game rules data. Looked in:\n' +
+        searched.map((candidate) => `  ${candidate}`).join('\n') +
+        '\n\nThe rules are compiled from HERO Designer\'s own data files, which are Hero Games\' ' +
+        'copyright and so are not distributed with this package. Generate them with:\n' +
+        '  ork-hero-extract-rules <path to HD6.jar>\n' +
+        `Or point at an existing copy with --rules <dir>, or the ${RULES_ENV_VAR} environment variable.`,
+      // No `source`: the message already names every path tried, and appending
+      // just one of them reads as though that were the only place we looked.
+      { cause },
     );
   }
   const manifest = JSON.parse(raw) as RulesManifest;

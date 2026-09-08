@@ -80,7 +80,12 @@ export { buildSheet, type Sheet, type BuildSheetOptions } from './tags/sheet.ts'
 export { createContext, formatTimestamp, type ContextOptions } from './tags/context.ts';
 export { evaluateMath } from './tags/math.ts';
 
-export { RulesLibrary, defaultRulesDirectory } from './rules/load.ts';
+export {
+  RulesLibrary,
+  defaultRulesDirectory,
+  rulesDirectoryCandidates,
+  RULES_ENV_VAR,
+} from './rules/load.ts';
 export { resolveSystem, indexSection } from './rules/merge.ts';
 export {
   compileTemplate,

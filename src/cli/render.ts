@@ -11,7 +11,9 @@ resulting character sheet. With no output file, the sheet goes to standard
 output.
 
 Options:
-      --rules <dir>   Where the compiled game rules live (default: bundled)
+      --rules <dir>   Where the compiled game rules live. By default the
+                      ORK_HERO_RULES environment variable, then ./rules, then
+                      the directory alongside this package.
       --no-strict     Leave anything that cannot be worked out blank, and carry
                       on, instead of stopping with an explanation
   -v, --verbose       Report progress on standard error
